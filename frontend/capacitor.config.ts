@@ -43,6 +43,10 @@ const config: CapacitorConfig = {
       // Android WebView 的 fetch 会受 CORS 限制；原生 HTTP 可让移动端直连自托管服务。
       enabled: true,
     },
+    LocalNotifications: {
+      // iOS 前台也显示横幅并播放声音；后台投递由系统通知中心处理。
+      presentationOptions: ["badge", "sound", "banner", "list"],
+    },
     SplashScreen: {
       // 禁用自动隐藏，由前端 JS 在渲染完成后手动调用 hide()
       // Safety net for older Android WebViews: JS still calls hide(), but native must not stay stuck forever.
