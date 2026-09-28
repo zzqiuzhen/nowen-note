@@ -38,6 +38,16 @@ function isNativeAndroid(): boolean {
   return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android";
 }
 
+function isNativeIos(): boolean {
+  return Capacitor.isNativePlatform() && Capacitor.getPlatform() === "ios";
+}
+
+function nativeNotificationSound(): string | undefined {
+  // Capacitor only attaches a sound when the notification carries one. "default"
+  // resolves to the system notification sound on iOS when no bundled file exists.
+  return isNativeIos() ? "default" : undefined;
+}
+
 function readNativeScheduleHistory(): TaskReminderScheduleHistory {
   if (typeof window === "undefined") return {};
   try {
@@ -178,6 +188,8 @@ export async function showImmediateTaskNotification(
           title,
           body,
           channelId: isNativeAndroid() ? TASK_REMINDER_CHANNEL_ID : undefined,
+          sound: nativeNotificationSound(),
+          interruptionLevel: isNativeIos() ? "active" : undefined,
           autoCancel: true,
           schedule: { at: new Date(Date.now() + 300), allowWhileIdle: true },
           extra: {
@@ -256,6 +268,9 @@ export async function syncNativeTaskNotifications(
           title: `⏰ ${i18n.t("tasks.notifications.taskReminderTitle")}`,
           body: i18n.t("tasks.notifications.taskReminderBody", { taskTitle: item.taskTitle }),
           channelId: platform === "android" ? TASK_REMINDER_CHANNEL_ID : undefined,
+          sound: nativeNotificationSound(),
+          interruptionLevel: isNativeIos() ? "active" : undefined,
+          threadIdentifier: platform === "ios" ? TASK_REMINDER_CHANNEL_ID : undefined,
           autoCancel: true,
           schedule: { at: item.scheduleAt, allowWhileIdle: true },
           extra: {

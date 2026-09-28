@@ -1,32 +1,57 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
-  <!-- Nowen Note Favicon · 轻量通透版
-       设计要点：
-       1. 透明背景，避免在浅色 tab 上形成黑块
-       2. 笔记卡片近乎填满画布（边距仅 2px），小尺寸可见度最大化
-       3. 白色纸面 + 品牌蓝描边，不再用深色底
-       4. 粗壮的蓝色 N 字母居中，16x16 也能识别
-  -->
-
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 108 108">
   <defs>
-    <!-- 纸面微渐变，避免纯白在浅色 tab 上消失 -->
-    <linearGradient id="paper" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#FFFFFF"/>
-      <stop offset="100%" stop-color="#EFF6FF"/>
+    <linearGradient id="bg" x1="10" y1="6" x2="98" y2="104" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#12151A"/>
+      <stop offset=".5" stop-color="#030406"/>
+      <stop offset="1" stop-color="#000000"/>
     </linearGradient>
+    <radialGradient id="halo" cx="0" cy="0" r="1" gradientTransform="translate(54 56) scale(50)">
+      <stop stop-color="#1683FF" stop-opacity=".32"/>
+      <stop offset=".52" stop-color="#0066F5" stop-opacity=".08"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="glassWash" x1="16" y1="8" x2="91" y2="100" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity=".12"/>
+      <stop offset=".42" stop-color="#DDF2FF" stop-opacity=".02"/>
+      <stop offset="1" stop-color="#0A84FF" stop-opacity=".08"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="14" y1="8" x2="94" y2="102" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity=".45"/>
+      <stop offset=".42" stop-color="#D8F1FF" stop-opacity=".15"/>
+      <stop offset="1" stop-color="#0A84FF" stop-opacity=".24"/>
+    </linearGradient>
+    <linearGradient id="nStroke" x1="31" y1="26" x2="77" y2="82" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset=".34" stop-color="#EDF9FF"/>
+      <stop offset=".7" stop-color="#9BD5FF"/>
+      <stop offset="1" stop-color="#087DFF"/>
+    </linearGradient>
+    <filter id="shadow" x="-45%" y="-45%" width="190%" height="200%">
+      <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#000000" flood-opacity=".72"/>
+    </filter>
+    <clipPath id="tile">
+      <rect width="108" height="108" rx="24"/>
+    </clipPath>
   </defs>
 
-  <!-- 笔记卡片主体（带右上折角），品牌蓝 2px 描边 -->
-  <path fill="url(#paper)" stroke="#2563EB" stroke-width="2" stroke-linejoin="round"
-        d="M6 3h14l6 6v18a2 2 0 0 1-2 2h-18a2 2 0 0 1-2-2v-22a2 2 0 0 1 2-2z"/>
+  <g clip-path="url(#tile)">
+    <rect width="108" height="108" rx="24" fill="url(#bg)"/>
+    <rect width="108" height="108" rx="24" fill="url(#halo)"/>
+    <rect width="108" height="108" rx="24" fill="url(#glassWash)"/>
+    <path d="M-5 83C17 62 34 88 57 65C74 48 88 55 113 29V113H-5Z" fill="#006CFF" opacity=".055"/>
+    <path d="M3 34C21 14 38 26 55 9C69 -5 86 11 111 -7V10C91 26 77 12 61 30C42 51 24 35 2 58Z" fill="#FFFFFF" opacity=".035"/>
+  </g>
 
-  <!-- 折角：蓝色三角强化品牌识别 -->
-  <path fill="#3B82F6" stroke="#2563EB" stroke-width="1.5" stroke-linejoin="round"
-        d="M20 3v6h6z"/>
+  <rect x=".75" y=".75" width="106.5" height="106.5" rx="23.25" fill="none" stroke="url(#edge)" stroke-width="1.5"/>
+  <path d="M18 14C27 7 39 4 50 4" fill="none" stroke="#FFFFFF" stroke-opacity=".32" stroke-width="2.6" stroke-linecap="round"/>
 
-  <!-- 字母 N（粗体几何风，实心色块） -->
-  <path fill="#2563EB"
-        d="M9 24V13h2.4l6.2 7V13H20v11h-2.4l-6.2-7v7z"/>
+  <g filter="url(#shadow)">
+    <path d="M32 79V29L76 79V29" fill="none" stroke="#0069FF" stroke-opacity=".3" stroke-width="21" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M33 78V30L75 78V30" fill="none" stroke="url(#nStroke)" stroke-width="13.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M36.5 36V32.5" fill="none" stroke="#FFFFFF" stroke-opacity=".68" stroke-width="2.3" stroke-linecap="round"/>
+    <path d="M71.5 35.5V32.5" fill="none" stroke="#FFFFFF" stroke-opacity=".46" stroke-width="2" stroke-linecap="round"/>
+    <path d="M40.5 41.5L69.5 73.5" fill="none" stroke="#FFFFFF" stroke-opacity=".3" stroke-width="1.9" stroke-linecap="round"/>
+  </g>
 
-  <!-- 右下角橙色小圆点，呼应品牌笔尖高光 -->
-  <circle cx="23" cy="23.5" r="1.6" fill="#F59E0B"/>
+  <path d="M40 82C49 85.4 61 85.4 70 82" fill="none" stroke="#1687FF" stroke-opacity=".24" stroke-width="2.2" stroke-linecap="round"/>
 </svg>
