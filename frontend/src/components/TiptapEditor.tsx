@@ -6614,7 +6614,7 @@ function looksLikeMarkdown(text: string): boolean {
   // 评分仅 1~2 分（链接 +1、粗体 +1）拿不到 3 分阈值，就会被当纯文本
   // 插入 → 链接 URL 被吞掉。这条短路把这种情况兜住。
   if (/!\[[^\]]*\]\([^)\s]+(?:\s+"[^"]*")?\)/.test(text)) return true;  // 图片 ![](url)
-  if (/(?<!!)\[[^\]]+\]\([^)\s]+(?:\s+"[^"]*")?\)/.test(text)) return true;  // 链接 [](url)
+  if (/(?:^|[^!])\[[^\]]+\]\([^)\s]+(?:\s+"[^"]*")?\)/.test(text)) return true;  // 链接 [](url)
 
   const lines = text.split("\n");
   let score = 0;

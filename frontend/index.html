@@ -105,6 +105,36 @@
         splash.classList.add("app-boot-splash--visible");
       }, 260);
 
+      window.__NOWEN_BOOT_FAILURE__ = "";
+      window.__NOWEN_BOOT_SHOW_FAILURE__ = function (reason) {
+        var message = String(reason || "未知脚本错误").replace(/\s+/g, " ").trim().slice(0, 180);
+        window.__NOWEN_BOOT_FAILURE__ = message;
+        var splash = document.getElementById("app-boot-splash");
+        var reload = document.getElementById("app-boot-reload");
+        var subtitle = document.querySelector(".app-boot-subtitle");
+        if (splash) {
+          window.__NOWEN_BOOT_VISIBLE_AT__ = window.__NOWEN_BOOT_VISIBLE_AT__ || Date.now();
+          splash.classList.add("app-boot-splash--visible");
+        }
+        if (subtitle) subtitle.textContent = "启动失败：" + message;
+        if (reload) {
+          reload.style.display = "inline-flex";
+          reload.onclick = function () { window.location.reload(); };
+        }
+      };
+      window.addEventListener("error", function (event) {
+        var target = event.target;
+        var reason = event.message;
+        if (!reason && target && target.tagName === "SCRIPT" && target.src) {
+          reason = "脚本加载失败：" + target.src.split("/").pop();
+        }
+        if (reason) window.__NOWEN_BOOT_SHOW_FAILURE__(reason);
+      }, true);
+      window.addEventListener("unhandledrejection", function (event) {
+        var reason = event.reason && (event.reason.message || event.reason);
+        window.__NOWEN_BOOT_SHOW_FAILURE__(reason || "未处理的启动异常");
+      });
+
       window.__NOWEN_BOOT_TIMER__ = window.setTimeout(function () {
         var splash = document.getElementById("app-boot-splash");
         var reload = document.getElementById("app-boot-reload");
@@ -113,7 +143,9 @@
           window.__NOWEN_BOOT_VISIBLE_AT__ = Date.now();
           splash.classList.add("app-boot-splash--visible");
         }
-        if (subtitle) subtitle.textContent = "加载时间较长，请检查网络或刷新重试";
+        if (subtitle && !window.__NOWEN_BOOT_FAILURE__) {
+          subtitle.textContent = "加载时间较长，请检查网络或刷新重试";
+        }
         if (reload) { reload.style.display = "inline-flex"; reload.onclick = function () { window.location.reload(); }; }
       }, 12000);
     </script>
