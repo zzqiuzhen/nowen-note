@@ -31,10 +31,11 @@ function joinApiPath(apiBaseUrl: string, path: string): string {
   return `${base}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
-function isNativeCapacitorRuntime(): boolean {
+function isAndroidCapacitorRuntime(): boolean {
   if (typeof window === "undefined") return false;
   try {
-    return Boolean((window as any).Capacitor?.isNativePlatform?.());
+    const capacitor = (window as any).Capacitor;
+    return Boolean(capacitor?.isNativePlatform?.()) && capacitor?.getPlatform?.() === "android";
   } catch {
     return false;
   }
@@ -64,7 +65,7 @@ function isPrivateNetworkUrl(value: string): boolean {
 }
 
 function shouldPreferNativeHttpTransport(url: string): boolean {
-  if (!isNativeCapacitorRuntime()) return false;
+  if (!isAndroidCapacitorRuntime()) return false;
   try {
     return new URL(url).protocol === "http:";
   } catch {
@@ -158,7 +159,7 @@ export async function primeNoteAttachmentAccess(
   ) return 0;
 
   const fetchImpl = options.fetchImpl ?? fetch;
-  const allowNativeFallback = options.fetchImpl === undefined && isNativeCapacitorRuntime();
+  const allowNativeFallback = options.fetchImpl === undefined && isAndroidCapacitorRuntime();
   const preferNative = allowNativeFallback && shouldPreferNativeHttpTransport(url);
   const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
   const timer = controller

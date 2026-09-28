@@ -86,7 +86,10 @@ describe("noteAttachmentAccessPriming", () => {
   });
 
   it("uses CapacitorHttp first for an Android clear-text LAN server", async () => {
-    (window as any).Capacitor = { isNativePlatform: () => true };
+    (window as any).Capacitor = {
+      isNativePlatform: () => true,
+      getPlatform: () => "android",
+    };
     const webFetch = vi.fn(async () => {
       throw new Error("WebView fetch should not be used for LAN priming");
     });
@@ -119,6 +122,31 @@ describe("noteAttachmentAccessPriming", () => {
     const resolved = new URL(resolveAttachmentAccessUrl(`/api/attachments/${ATTACHMENT_A}`));
     expect(resolved.origin).toBe("http://192.168.1.20:3001");
     expect(resolved.searchParams.get("sig")).toBe("signed-lan");
+  });
+
+  it("uses WebView fetch instead of CapacitorHttp on iOS", async () => {
+    (window as any).Capacitor = {
+      isNativePlatform: () => true,
+      getPlatform: () => "ios",
+    };
+    const webFetch = vi.fn(async () => new Response(JSON.stringify({
+      noteId: "note-ios",
+      urls: { [ATTACHMENT_A]: signedUrl(ATTACHMENT_A, "signed-ios") },
+    }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
+    vi.stubGlobal("fetch", webFetch);
+
+    const registered = await primeNoteAttachmentAccess(
+      "note-ios",
+      "http://192.168.1.20:3001/api",
+      { token: "jwt-token" },
+    );
+
+    expect(registered).toBe(1);
+    expect(capacitorHttp.request).not.toHaveBeenCalled();
+    expect(webFetch).toHaveBeenCalledTimes(1);
   });
 
   it("Case 3: primes all images in a note without converting their persisted references", async () => {

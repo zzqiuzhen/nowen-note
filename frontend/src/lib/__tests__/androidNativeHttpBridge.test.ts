@@ -181,4 +181,25 @@ describe("androidNativeHttpBridge", () => {
       headers: { "Content-Type": "application/json" },
     })).toBe(false);
   });
+
+  it("does not install or route requests on iOS", async () => {
+    capacitorState.platform = "ios";
+    browserFetch.mockResolvedValueOnce(new Response(JSON.stringify({ user: { id: "u1" } }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
+
+    cleanup = installAndroidNativeHttpBridge();
+    const response = await fetch("https://note.example.com/api/auth/verify", {
+      headers: { Authorization: "Bearer token-1" },
+    });
+
+    await expect(response.json()).resolves.toEqual({ user: { id: "u1" } });
+    expect(cleanup).toBeNull();
+    expect(shouldUseAndroidNativeHttp("https://note.example.com/api/auth/verify", {
+      headers: { "Content-Type": "application/json" },
+    })).toBe(false);
+    expect(capacitorState.request).not.toHaveBeenCalled();
+    expect(browserFetch).toHaveBeenCalledTimes(1);
+  });
 });

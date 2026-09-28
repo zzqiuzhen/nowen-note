@@ -33,7 +33,10 @@ describe("api native HTTP fallback", () => {
   it("uses CapacitorHttp for Android native GET requests when fetch fails", async () => {
     localStorage.setItem("nowen-server-url", "https://note.example.com");
     localStorage.setItem("nowen-token", "token-1");
-    (window as any).Capacitor = { isNativePlatform: () => true };
+    (window as any).Capacitor = {
+      isNativePlatform: () => true,
+      getPlatform: () => "android",
+    };
     vi.stubGlobal("fetch", vi.fn(async () => {
       throw new TypeError("Failed to fetch");
     }));
@@ -68,9 +71,28 @@ describe("api native HTTP fallback", () => {
     expect(capacitorHttpRequestMock).not.toHaveBeenCalled();
   });
 
+  it("does not use CapacitorHttp on iOS", async () => {
+    localStorage.setItem("nowen-server-url", "https://note.example.com");
+    (window as any).Capacitor = {
+      isNativePlatform: () => true,
+      getPlatform: () => "ios",
+    };
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    }));
+
+    await expect(api.getMe()).rejects.toThrow("Failed to fetch");
+
+    expect(capacitorHttpRequestMock).not.toHaveBeenCalled();
+  });
+
   it("does not use CapacitorHttp for failed POST requests", async () => {
     localStorage.setItem("nowen-server-url", "https://note.example.com");
-    (window as any).Capacitor = { isNativePlatform: () => true };
+    localStorage.setItem("nowen-mobile-account-login-requested", "1");
+    (window as any).Capacitor = {
+      isNativePlatform: () => true,
+      getPlatform: () => "android",
+    };
     vi.stubGlobal("fetch", vi.fn(async () => {
       throw new TypeError("Failed to fetch");
     }));
@@ -93,7 +115,10 @@ describe("api native HTTP fallback with IPv6 server", () => {
   it("passes a bracketed IPv6 API URL to CapacitorHttp", async () => {
     localStorage.setItem("nowen-server-url", "240e:35c:41f:4c00::1d0/128");
     localStorage.setItem("nowen-token", "token-ipv6");
-    (window as any).Capacitor = { isNativePlatform: () => true };
+    (window as any).Capacitor = {
+      isNativePlatform: () => true,
+      getPlatform: () => "android",
+    };
     vi.stubGlobal("fetch", vi.fn(async () => {
       throw new TypeError("Failed to fetch");
     }));
