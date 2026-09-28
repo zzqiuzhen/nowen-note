@@ -3,6 +3,33 @@ import fs from "node:fs"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 
+const IOS16_UNSUPPORTED_EMAIL_LOOKBEHIND = "(?<=^|\\s|\\p{P}|\\p{S})"
+
+/**
+ * mdast-util-gfm-autolink-literal 2.0.1 adds a lookbehind to its email
+ * autolink regex. WebKit below iOS 16.4 cannot parse that regex and the
+ * module graph then fails before React can mount. The replacement keeps the
+ * same captures; findEmail() already performs the preceding-character check.
+ */
+function ios16RegexCompatibility() {
+  return {
+    name: "ios16-regex-compatibility",
+    enforce: "pre" as const,
+    transform(code: string, id: string) {
+      if (
+        !id.includes("mdast-util-gfm-autolink-literal") ||
+        !code.includes(IOS16_UNSUPPORTED_EMAIL_LOOKBEHIND)
+      ) {
+        return null
+      }
+      return {
+        code: code.split(IOS16_UNSUPPORTED_EMAIL_LOOKBEHIND).join(""),
+        map: null,
+      }
+    },
+  }
+}
+
 // 读取根 package.json 的 version，注入到前端以便 UI 展示真实版本号
 // （release.sh 会在发布时更新根 package.json 的 version 字段）
 const rootPkg = JSON.parse(
@@ -15,7 +42,7 @@ export default defineConfig({
   // 使用相对 base，确保 file:// 下 /assets 不会解析到磁盘根目录。
   base: "./",
   root: path.resolve(__dirname),
-  plugins: [react()],
+  plugins: [ios16RegexCompatibility(), react()],
   define: {
     // 编译期常量；使用 JSON.stringify 确保是带引号的字符串字面量
     __APP_VERSION__: JSON.stringify(APP_VERSION),
