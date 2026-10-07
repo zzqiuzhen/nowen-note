@@ -343,3 +343,17 @@ export default function TagInput({ noteId, noteTags, onTagsChange, mobileCompact
     </div>
   );
 }
+
+/**
+ * True while the user is interacting with a tag input (the note header tag bar).
+ *
+ * The mobile editors collapse their entire header as soon as the soft keyboard appears
+ * (`compactMobileEditing`), which unmounts the very tag input the user just focused: the
+ * keyboard opens and the row disappears, so adding a tag feels completely unresponsive.
+ * Excluding the tag row's own focus from that collapse keeps it mounted while tagging.
+ */
+export function isTagInputFocused(): boolean {
+  if (typeof document === "undefined") return false;
+  const active = document.activeElement as HTMLElement | null;
+  return !!active && typeof active.closest === "function" && !!active.closest(".tag-input-area");
+}

@@ -140,7 +140,7 @@ import { choose, prompt as promptDialog } from "@/components/ui/confirm";
 import { normalizeImageFlipX, normalizeImageRotation, type ImageRotation } from "@/lib/imageNodeTransformBootstrap";
 import { registerMobileBackHandler } from "@/lib/mobileBackNavigation";
 import { Note, Tag, type FileDetail, type FileItem } from "@/types";
-import TagInput from "@/components/TagInput";
+import TagInput, { isTagInputFocused } from "@/components/TagInput";
 import AIWritingAssistant from "@/components/AIWritingAssistant";
 import type { NoteEditorHandle, NoteEditorHeading, NoteEditorProps } from "@/components/editors/types";
 import type { FormatMenuPayload } from "@/lib/desktopBridge";
@@ -1711,7 +1711,7 @@ const TiptapEditor = forwardRef<NoteEditorHandle, TiptapEditorProps>(function Ti
     return () => mq.removeEventListener("change", handler);
   }, []);
   const { visible: keyboardVisible } = useKeyboardVisible();
-  const compactMobileEditing = isMobile && editable && keyboardVisible;
+  const compactMobileEditing = isMobile && editable && keyboardVisible && !isTagInputFocused();
   const [mobileToolbarExpanded, setMobileToolbarExpanded] = useState(false);
   useEffect(() => {
     setMobileToolbarExpanded(false);

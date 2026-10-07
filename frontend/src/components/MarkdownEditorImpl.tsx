@@ -126,7 +126,7 @@ import {
 import { choose } from "@/components/ui/confirm";
 
 import { Note, Tag, type FileItem } from "@/types";
-import TagInput from "@/components/TagInput";
+import TagInput, { isTagInputFocused } from "@/components/TagInput";
 import AIWritingAssistant from "@/components/AIWritingAssistant";
 import { toast } from "@/lib/toast";
 import { copyText } from "@/lib/clipboard";
@@ -676,7 +676,10 @@ export default forwardRef<NoteEditorHandle, MarkdownEditorProps>(function Markdo
   const compactMobileEditing = editable
     && keyboardVisible
     && typeof window !== "undefined"
-    && window.matchMedia("(max-width: 767px)").matches;
+    && window.matchMedia("(max-width: 767px)").matches
+    // Keep the header expanded while the user is editing the tag row: the soft keyboard
+    // must not unmount the tag input that raising it was caused by.
+    && !isTagInputFocused();
   const [mobileToolbarExpanded, setMobileToolbarExpanded] = useState(false);
   useEffect(() => {
     setMobileToolbarExpanded(false);
