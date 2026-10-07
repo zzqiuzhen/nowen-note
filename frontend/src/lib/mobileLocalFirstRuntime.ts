@@ -70,10 +70,24 @@ function scopeFor(workspaceId: unknown): { scopeKey: string; workspaceId: string
   return { scopeKey: value ? `workspace:${value}` : "personal", workspaceId: value };
 }
 
+/**
+ * Facade over the keychain plugin.
+ *
+ * Capacitor plugin proxies expose a *callable* `then`, so returning the proxy from an `async`
+ * function makes it thenable: promise resolution calls `SecureStorage.then(resolve, reject)`,
+ * the native plugin has no such method, and the promise rejects without ever settling. That
+ * hung secureGet/secureSet, which hung mobile-local-first boot and left the app stuck on the
+ * startup card (iOS: "SecureStorage.then() is not implemented on ios"). A plain object can
+ * never be mistaken for a thenable, so the proxy stays inside this function.
+ */
 async function secureStorage() {
   const module = await import("@aparajita/capacitor-secure-storage");
   try { await module.SecureStorage.setKeyPrefix("nowen_"); } catch { /* 已设置时可继续 */ }
-  return module.SecureStorage;
+  return {
+    get: (key: string) => module.SecureStorage.get(key),
+    set: (key: string, value: string) => module.SecureStorage.set(key, value),
+    remove: (key: string) => module.SecureStorage.remove(key),
+  };
 }
 
 async function secureGet(key: string): Promise<string | null> {
