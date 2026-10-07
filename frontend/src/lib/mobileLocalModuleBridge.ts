@@ -15,7 +15,7 @@ import type {
 } from "@/types";
 import { api } from "./api";
 import { newLocalId } from "./localRepository";
-import { isMobileLocalMode } from "./mobileLocalMode";
+import { isAndroidNativeRuntime, isMobileLocalMode } from "./mobileLocalMode";
 import { ensureMobileLocalMindMapTree } from "./mobileLocalMindMapTree";
 import type { NativeDatabase } from "./nativeDatabase";
 import type { NativeLocalRepository } from "./nativeLocalRepository";
@@ -346,6 +346,13 @@ export function installMobileLocalModuleBridge(
     hash:typeof row.hash === "string"?row.hash:null,folderId:null,folderName:null,
     primaryNote:row.noteId?{id:String(row.noteId),title:String(row.noteTitle||""),notebookId:row.notebookId?String(row.notebookId):null,notebookName:row.notebookName?String(row.notebookName):null,notebookIcon:row.notebookIcon?String(row.notebookIcon):null,isTrashed:Number(row.isTrashed)||0}:null,
   });
+  // 附件在移动端还没有完整进入 Sync V2：
+  //   - Android 由本地附件仓库（文件系统 + 本地 SQLite attachments 表）承接，离线可用；
+  //   - iOS 没有 AttachmentMedia 原生实现，本地 attachments 表不会真正落盘并把 available 置 1，
+  //     一旦让本地实现接管 api.files，文件管理会永远空白（与电脑端/服务端列表不一致）。
+  // 因此只让 Android 用本地目录替换 api.files，其余原生平台（iOS）继续走服务端实现。
+  const useLocalAttachmentCatalog = isAndroidNativeRuntime();
+  if (useLocalAttachmentCatalog) {
   target.files.stats = async ():Promise<FileStats>=>{const rows=await fileRows();const images=rows.filter((row)=>String(row.mimeType).startsWith("image/"));const files=rows.filter((row)=>!String(row.mimeType).startsWith("image/"));const sum=(items:Array<Record<string,unknown>>)=>items.reduce((total,row)=>total+(Number(row.size)||0),0);const byMime=[...new Set(rows.map((row)=>String(row.mimeType)))].map((mime)=>{const items=rows.filter((row)=>row.mimeType===mime);return {mime,count:items.length,bytes:sum(items)};});return {total:rows.length,totalBytes:sum(rows),images:{count:images.length,bytes:sum(images)},files:{count:files.length,bytes:sum(files)},unreferenced:{count:0,bytes:0},myUploads:{total:rows.length,referenced:rows.length,unreferenced:0},storage:{mode:"local",driver:"local",source:"default"},byMime};};
   target.files.list = async (params:Record<string,unknown>={}):Promise<FileListResponse>=>{let rows=await fileRows();if(params.category)rows=rows.filter((row)=>(String(row.mimeType).startsWith("image/")?"image":"file")===params.category);if(params.q)rows=rows.filter((row)=>String(row.filename).toLowerCase().includes(String(params.q).toLowerCase()));const items=await Promise.all(rows.map(toFileItem));const page=Number(params.page)||1,pageSize=Number(params.pageSize)||50,start=(page-1)*pageSize;return {items:items.slice(start,start+pageSize),total:items.length,page,pageSize};};
   target.files.get = async (id:string):Promise<FileDetail>=>{const row=(await fileRows()).find((item)=>item.id===id);if(!row)throw new Error("文件不存在");const item=await toFileItem(row);return {...item,references:item.primaryNote?[{...item.primaryNote,updatedAt:String(row.updatedAt),isPrimary:true}]:[]};};
@@ -355,6 +362,7 @@ export function installMobileLocalModuleBridge(
   target.files.rename = async (id:string,filename:string)=>{await db.run("UPDATE attachments SET filename=?,updatedAt=? WHERE id=?",[filename,now(),id]);const row=(await db.query<Record<string,unknown>>("SELECT * FROM attachments WHERE id=?",[id]))[0];if(row)await enqueue("attachment",id,"upsert",row);return {success:true,filename};};
   target.attachmentFolders.list = async()=>({folders:[]});
   target.dataFile.cleanupOrphans = async()=>({totalRemovedItems:0,totalFreedBytes:0,removed:{databaseRows:0,contentReferences:0,diskFiles:0}});
+  }
 
   return () => {
     Object.assign(target, originals);
