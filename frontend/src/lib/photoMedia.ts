@@ -37,7 +37,7 @@ export async function fetchPhotoMediaInfo(url: string, signal: AbortSignal): Pro
     return info;
   };
   // Android 局域网 HTTP 由原生 HTTP 层读取元数据，避开 HTTPS WebView 的混合内容限制。
-  if (Capacitor.isNativePlatform() && /^http:\/\//i.test(url)) {
+  if (Capacitor.isNativePlatform() && Capacitor.getPlatform() === "android" && /^http:\/\//i.test(url)) {
     const response = await CapacitorHttp.get({ url, headers, responseType: "json", connectTimeout: 20000, readTimeout: 20000 });
     if (response.status !== 200) throw new Error("PHOTO_MEDIA_INFO_FAILED");
     return register(response.data as PhotoMediaInfo);

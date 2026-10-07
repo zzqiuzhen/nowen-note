@@ -119,14 +119,6 @@ export function isAndroidNativeRuntime(): boolean {
   }
 }
 
-function isNativeCapacitorRuntime(): boolean {
-  try {
-    return Capacitor.isNativePlatform() && Capacitor.getPlatform() !== "web";
-  } catch {
-    return false;
-  }
-}
-
 function isJsonApiRequest(input: FetchInput, init: FetchInit | undefined, url: URL): boolean {
   if (!/(?:^|\/)(?:api|publicapi)(?:\/|$)/.test(url.pathname)) return false;
 
@@ -149,7 +141,7 @@ function isJsonApiRequest(input: FetchInput, init: FetchInit | undefined, url: U
  * 语义。普通 JSON 写请求仍由原有 API 层负责离线队列；这里只替换实际传输通道。
  */
 export function shouldUseAndroidNativeHttp(input: FetchInput, init?: FetchInit): boolean {
-  if (!isNativeCapacitorRuntime()) return false;
+  if (!isAndroidNativeRuntime()) return false;
 
   const method = getRequestMethod(input, init);
   if (!["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"].includes(method)) return false;
@@ -222,7 +214,7 @@ async function androidNativeFetch(
 export function installAndroidNativeHttpBridge(
   options: AndroidNativeHttpBridgeOptions = {},
 ): (() => void) | null {
-  if (typeof window === "undefined" || !isNativeCapacitorRuntime()) return null;
+  if (typeof window === "undefined" || !isAndroidNativeRuntime()) return null;
 
   const runtime = window as typeof window & Record<string, unknown>;
   if (runtime[BRIDGE_FLAG]) return null;

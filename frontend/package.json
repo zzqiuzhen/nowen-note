@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build && node ../scripts/verify-sync-notification-ui.cjs",
+    "build": "tsc -b && vite build && node ../scripts/verify-sync-notification-ui.cjs && node ../scripts/verify-ios16-webview.mjs",
     "build:web": "npm run build && node ../scripts/precompress-frontend.mjs",
     "analyze:bundle": "node ../scripts/analyze-frontend-bundle.mjs",
     "verify:bundle": "node ../scripts/analyze-frontend-bundle.mjs --enforce",

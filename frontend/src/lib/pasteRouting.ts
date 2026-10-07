@@ -362,7 +362,7 @@ function hasMarkdownStructureEvidence(text: string): boolean {
   if (!normalized) return false;
 
   if (/!\[[^\]]*\]\([^)\s]+(?:\s+"[^"]*")?\)/.test(normalized)) return true;
-  if (/(?<!!)\[[^\]]+\]\([^)\s]+(?:\s+"[^"]*")?\)/.test(normalized)) return true;
+  if (/(?:^|[^!])\[[^\]]+\]\([^)\s]+(?:\s+"[^"]*")?\)/.test(normalized)) return true;
 
   let score = 0;
   for (const line of normalized.split("\n")) {

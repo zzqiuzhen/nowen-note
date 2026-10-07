@@ -31,10 +31,13 @@ function joinApiPath(apiBaseUrl: string, path: string): string {
   return `${base}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
-function isNativeCapacitorRuntime(): boolean {
+function isAndroidCapacitorRuntime(): boolean {
   if (typeof window === "undefined") return false;
   try {
-    return Boolean((window as Window & { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.());
+    const capacitor = (window as Window & {
+      Capacitor?: { isNativePlatform?: () => boolean; getPlatform?: () => string };
+    }).Capacitor;
+    return Boolean(capacitor?.isNativePlatform?.()) && capacitor?.getPlatform?.() === "android";
   } catch {
     return false;
   }
@@ -64,7 +67,7 @@ function isPrivateNetworkUrl(value: string): boolean {
 }
 
 function shouldPreferNativeHttpTransport(url: string): boolean {
-  if (!isNativeCapacitorRuntime()) return false;
+  if (!isAndroidCapacitorRuntime()) return false;
   try {
     return new URL(url).protocol === "http:";
   } catch {
@@ -130,6 +133,9 @@ async function requestAccessViaWeb(
  * clear-text LAN address such as http://192.168.x.x:3001, the authorization preflight therefore
  * must not depend on WebView fetch succeeding. Use native HTTP first for that exact runtime, then
  * register the returned signed URLs against the real LAN origin before media nodes are mounted.
+ *
+ * iOS keeps the WebView fetch path: CapacitorHttp is intentionally left unregistered there
+ * (see the iOS 16 TrollStore build), so the platform check must exclude it.
  */
 export async function primeNoteAttachmentAccess(
   noteId: string,
@@ -158,7 +164,7 @@ export async function primeNoteAttachmentAccess(
   ) return 0;
 
   const fetchImpl = options.fetchImpl ?? fetch;
-  const allowNativeFallback = options.fetchImpl === undefined && isNativeCapacitorRuntime();
+  const allowNativeFallback = options.fetchImpl === undefined && isAndroidCapacitorRuntime();
   const preferNative = allowNativeFallback && shouldPreferNativeHttpTransport(url);
   const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
   const timer = controller

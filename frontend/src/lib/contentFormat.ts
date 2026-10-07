@@ -312,7 +312,7 @@ function getTurndown(): TurndownService {
       if (node.nodeName !== "SPAN") return false;
       const el = node as HTMLElement;
       const style = el.getAttribute("style") || "";
-      return /font-size\s*:|(?<!background-)color\s*:/i.test(style);
+      return /font-size\s*:/i.test(style) || /(?:^|;)\s*color\s*:/i.test(style);
     },
     replacement: (content, node) => {
       const el = node as HTMLElement;

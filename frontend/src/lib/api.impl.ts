@@ -251,6 +251,10 @@ export function isNativeCapacitor(): boolean {
   return typeof window !== "undefined" && !!(window as any).Capacitor?.isNativePlatform?.();
 }
 
+export function isAndroidCapacitor(): boolean {
+  return isNativeCapacitor() && (window as any).Capacitor?.getPlatform?.() === "android";
+}
+
 export function isAndroidInvalidServerUrl(url: string): boolean {
   if (!url) return true;
   try {
@@ -847,7 +851,7 @@ async function requestInternal<T>(url: string, options?: RequestOptions): Promis
       ...restOptions?.headers,
     });
     const tryNativeFallback = async (error: unknown, includeConnId: boolean): Promise<Response | null> => {
-      if (!isNativeCapacitor()) return null;
+      if (!isAndroidCapacitor()) return null;
       if (!shouldTryNativeHttpFallback(error, method)) return null;
       try {
         const nativeRes = await nativeHttpFetch(fullUrl, {

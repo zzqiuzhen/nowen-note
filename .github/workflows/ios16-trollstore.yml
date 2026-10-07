@@ -1,0 +1,170 @@
+name: iOS 16 TrollStore IPA
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Marketing version (for example 1.5.0)"
+        required: true
+        default: "1.5.0"
+        type: string
+      build_number:
+        description: "Build number"
+        required: true
+        default: "1"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 90
+
+    env:
+      IOS_SCHEME: App
+      IOS_WORKSPACE: frontend/ios/App/App.xcworkspace
+      APP_NAME: App
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build web assets
+        working-directory: frontend
+        run: npm run build
+
+      - name: Sync Capacitor iOS project
+        working-directory: frontend
+        run: npx cap sync ios
+
+      - name: Disable CapacitorHttp patching on iOS
+        working-directory: frontend
+        run: |
+          node -e "const fs=require('fs');const p='ios/App/App/capacitor.config.json';const c=JSON.parse(fs.readFileSync(p,'utf8'));c.plugins=c.plugins||{};c.plugins.CapacitorHttp={...(c.plugins.CapacitorHttp||{}),enabled:false};fs.writeFileSync(p,JSON.stringify(c,null,2)+'\n');if(JSON.parse(fs.readFileSync(p,'utf8')).plugins.CapacitorHttp.enabled!==false)process.exit(1);console.log('CapacitorHttp disabled for iOS');"
+
+      - name: Install CocoaPods dependencies
+        working-directory: frontend/ios/App
+        run: pod install --repo-update
+
+      - name: Archive unsigned app
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -workspace "$IOS_WORKSPACE" \
+            -scheme "$IOS_SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination "generic/platform=iOS" \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            MARKETING_VERSION="${{ inputs.version }}" \
+            CURRENT_PROJECT_VERSION="${{ inputs.build_number }}" \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            EXPANDED_CODE_SIGN_IDENTITY="" \
+            archive
+
+      - name: Package TrollStore IPA
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          APP="$RUNNER_TEMP/App.xcarchive/Products/Applications/$APP_NAME.app"
+          IPA_DIR="$RUNNER_TEMP/ipa"
+          IPA_NAME="Nowen-Note-iOS16-TrollStore-${{ inputs.version }}-${{ inputs.build_number }}.ipa"
+
+          test -d "$APP"
+          mkdir -p "$IPA_DIR/Payload"
+          cp -R "$APP" "$IPA_DIR/Payload/$APP_NAME.app"
+
+          # TrollStore can install ad-hoc signed apps. Sign every nested code
+          # object, then deep-sign the app bundle and verify the final seal.
+          if [ -d "$IPA_DIR/Payload/$APP_NAME.app/Frameworks" ]; then
+            find "$IPA_DIR/Payload/$APP_NAME.app/Frameworks" -type d -name "*.framework" -print0 |
+              while IFS= read -r -d '' item; do
+                codesign --force --sign - --timestamp=none "$item"
+              done
+            find "$IPA_DIR/Payload/$APP_NAME.app/Frameworks" -type f \
+              \( -name "*.dylib" -o -name "*.so" \) -print0 |
+              while IFS= read -r -d '' item; do
+                codesign --force --sign - --timestamp=none "$item"
+              done
+          fi
+          if [ -d "$IPA_DIR/Payload/$APP_NAME.app/PlugIns" ]; then
+            find "$IPA_DIR/Payload/$APP_NAME.app/PlugIns" -type d -name "*.appex" -print0 |
+              while IFS= read -r -d '' item; do
+                codesign --force --deep --sign - --timestamp=none "$item"
+              done
+          fi
+          codesign --force --deep --sign - --timestamp=none "$IPA_DIR/Payload/$APP_NAME.app"
+
+          (
+            cd "$IPA_DIR"
+            zip -qry "$IPA_NAME" Payload
+          )
+
+          MIN_OS=$(/usr/libexec/PlistBuddy -c "Print :MinimumOSVersion" "$APP/Info.plist")
+          SHORT_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Info.plist")
+          BUILD_NUMBER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/Info.plist")
+
+          echo "MinimumOSVersion=$MIN_OS"
+          echo "CFBundleShortVersionString=$SHORT_VERSION"
+          echo "CFBundleVersion=$BUILD_NUMBER"
+
+          test "${MIN_OS%%.*}" -le 16
+          test "$SHORT_VERSION" = "${{ inputs.version }}"
+          test "$BUILD_NUMBER" = "${{ inputs.build_number }}"
+
+          unzip -t "$IPA_DIR/$IPA_NAME"
+          lipo -info "$IPA_DIR/Payload/$APP_NAME.app/$APP_NAME"
+          codesign --verify --deep --strict --verbose=2 "$IPA_DIR/Payload/$APP_NAME.app"
+          shasum -a 256 "$IPA_DIR/$IPA_NAME" | tee "$IPA_DIR/SHA256SUMS.txt"
+
+          echo "ipa_path=$IPA_DIR/$IPA_NAME" >> "$GITHUB_OUTPUT"
+          echo "minimum_ios=$MIN_OS" >> "$GITHUB_OUTPUT"
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: nowen-note-ios16-trollstore
+          path: |
+            ${{ runner.temp }}/ipa/*.ipa
+            ${{ runner.temp }}/ipa/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## TrollStore IPA"
+            echo "- Version: ${{ inputs.version }} (${{ inputs.build_number }})"
+            echo "- Minimum iOS: ${{ steps.package.outputs.minimum_ios }}"
+            echo "- Artifact: nowen-note-ios16-trollstore"
+          } >> "$GITHUB_STEP_SUMMARY"
