@@ -26,6 +26,7 @@ jobs:
       IOS_SCHEME: App
       IOS_WORKSPACE: frontend/ios/App/App.xcworkspace
       APP_NAME: App
+      NODE_OPTIONS: --max-old-space-size=4096
 
     steps:
       - name: Checkout
