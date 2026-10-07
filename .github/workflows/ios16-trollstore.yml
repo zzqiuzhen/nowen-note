@@ -13,9 +13,14 @@ on:
         required: true
         default: "1"
         type: string
+      release_tag:
+        description: "Optional: publish a GitHub release with this tag (for example v1.5.0-ios16-trollstore-1)"
+        required: false
+        default: ""
+        type: string
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -150,8 +155,52 @@ jobs:
           echo "ipa_path=$IPA_DIR/$IPA_NAME" >> "$GITHUB_OUTPUT"
           echo "minimum_ios=$MIN_OS" >> "$GITHUB_OUTPUT"
 
+      - name: Publish GitHub release
+        if: ${{ inputs.release_tag != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          IPA_SRC="${{ steps.package.outputs.ipa_path }}"
+          ASSET_NAME="Nowen-Note-iOS16-TrollStore-${RELEASE_VERSION}-${{ inputs.build_number }}.ipa"
+          ASSET_DIR="$RUNNER_TEMP/release"
+          mkdir -p "$ASSET_DIR"
+          cp "$IPA_SRC" "$ASSET_DIR/$ASSET_NAME"
+          (
+            cd "$ASSET_DIR"
+            shasum -a 256 "$ASSET_NAME" | tee "$ASSET_NAME.sha256"
+          )
+
+          NOTES="$ASSET_DIR/notes.md"
+          {
+            printf '# Nowen Note %s (iOS 16 TrollStore)\n\n' "$RELEASE_VERSION"
+            printf 'Ad-hoc signed iOS IPA for TrollStore on iOS 16, built from the upstream v%s source.\n\n' "$RELEASE_VERSION"
+            printf -- '- Minimum iOS: %s\n' "${{ steps.package.outputs.minimum_ios }}"
+            printf -- '- Build number: %s\n' "${{ inputs.build_number }}"
+            printf -- '- Bundle ID: com.nowen.note\n'
+            printf -- '- Architecture: arm64\n'
+            printf -- '- Server compatibility: Nowen Note v%s Docker image\n\n' "$RELEASE_VERSION"
+            printf 'Install with TrollStore (iOS 14-17) or sideload with a personal certificate.\n'
+            printf 'This build is ad-hoc signed on purpose and is not signed for the App Store or TestFlight.\n'
+          } > "$NOTES"
+
+          # Drop any stale release/tag, then create the release on this exact commit.
+          gh release delete "$RELEASE_TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$RELEASE_TAG" 2>/dev/null || true
+
+          gh release create "$RELEASE_TAG" \
+            "$ASSET_DIR/$ASSET_NAME" \
+            "$ASSET_DIR/$ASSET_NAME.sha256" \
+            --title "Nowen Note ${RELEASE_VERSION} (iOS 16 TrollStore)" \
+            --notes-file "$NOTES" \
+            --target "$GITHUB_SHA"
+
       - name: Upload IPA
         uses: actions/upload-artifact@v4
+        continue-on-error: true
         with:
           name: nowen-note-ios16-trollstore
           path: |
@@ -168,4 +217,7 @@ jobs:
             echo "- Version: ${{ inputs.version }} (${{ inputs.build_number }})"
             echo "- Minimum iOS: ${{ steps.package.outputs.minimum_ios }}"
             echo "- Artifact: nowen-note-ios16-trollstore"
+            if [ -n "${{ inputs.release_tag }}" ]; then
+              echo "- Release: ${{ inputs.release_tag }}"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
