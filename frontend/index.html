@@ -185,7 +185,12 @@
           if (!error) return "unknown";
           if (typeof error === "string") return error;
           try {
-            return String(error.stack || error.message || error);
+            var message = typeof error.message === "string" ? error.message : "";
+            var stack = typeof error.stack === "string" ? error.stack : "";
+            // WebKit/Safari stacks carry only frames, never the message line, and the message
+            // is the only place a Capacitor plugin failure names itself.
+            if (message && stack && stack.indexOf(message) === -1) return message + "\n" + stack;
+            return stack || message || String(error);
           } catch (e) {
             return "unserializable error";
           }
@@ -318,8 +323,24 @@
           }
         }, true);
 
+        // A native capability that does not exist on this platform (an Android-only Capacitor
+        // plugin, or one disabled in capacitor.config.json) degrades the WebView build but must
+        // never raise the blocking startup-failure card: main.tsx requires that an unsupported
+        // native bridge cannot stop a user from reaching login or the first screen.
+        function isUnavailableNativeCapability(error) {
+          if (!error || typeof error.message !== "string") return false;
+          return /plugin is not implemented|is not implemented on (?:ios|android|web)|not available for (?:ios|android|web)/i.test(error.message);
+        }
+
         window.addEventListener("unhandledrejection", function (event) {
-          window.__NOWEN_REPORT_BOOT_ERROR__("unhandledrejection", event && event.reason, true);
+          var reason = event && event.reason;
+          var unavailable = isUnavailableNativeCapability(reason);
+          if (unavailable) {
+            try {
+              console.warn("[boot] native capability unavailable, continuing:", errorText(reason).slice(0, 300));
+            } catch (ignored) {}
+          }
+          window.__NOWEN_REPORT_BOOT_ERROR__("unhandledrejection", reason, !unavailable);
         });
 
         // Fast starts should not flash a splash card. Reveal it only after 260ms, then let
