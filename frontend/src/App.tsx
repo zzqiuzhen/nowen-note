@@ -858,7 +858,7 @@ function AppLayout() {
               onPointerUp={handleSidebarBackdropPointerUp}
               onPointerCancel={handleSidebarBackdropPointerCancel}
               aria-hidden={!state.mobileSidebarOpen}
-              className={cn("fixed inset-0 z-40 bg-zinc-900/60 md:hidden", !state.mobileSidebarOpen && "pointer-events-none")}
+              className={`fixed inset-0 z-40 bg-zinc-900/60 md:hidden${state.mobileSidebarOpen ? "" : " pointer-events-none"}`}
             />
             {/* 移动端抽屉常驻挂载：打开只是合成层位移，不再「打开才挂载」整棵知识树。 */}
             <motion.div
@@ -866,7 +866,7 @@ function AppLayout() {
               animate={{ x: state.mobileSidebarOpen ? "0%" : "-100%" }}
               transition={{ type: "tween", ease: [0.22, 1, 0.36, 1], duration: 0.22 }}
               aria-hidden={!state.mobileSidebarOpen}
-              className={cn("fixed inset-y-0 left-0 z-50 flex w-screen max-w-none transform-gpu overflow-hidden shadow-2xl will-change-transform md:hidden", !state.mobileSidebarOpen && "pointer-events-none")}
+              className={`fixed inset-y-0 left-0 z-50 flex w-screen max-w-none transform-gpu overflow-hidden shadow-2xl will-change-transform md:hidden${state.mobileSidebarOpen ? "" : " pointer-events-none"}`}
               // 底部避让 home indicator / 手势栏：抽屉容器统一处理，
               // 内部 NavRail / Sidebar 不再各自加 safe-area-bottom，避免重复 padding。
               // 顶部状态栏避让仍由 NavRail / Sidebar Header 各自的 paddingTop 处理
