@@ -34,10 +34,14 @@ function joinApiPath(apiBaseUrl: string, path: string): string {
   return `${base}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
-function isNativeCapacitorRuntime(): boolean {
+// 附件预取的原生 HTTP 优先通道只在 Android 可用：iOS 构建关闭了 CapacitorHttp。
+function isAndroidCapacitorRuntime(): boolean {
   if (typeof window === "undefined") return false;
   try {
-    return Boolean((window as Window & { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform?.());
+    const capacitor = (window as Window & {
+      Capacitor?: { isNativePlatform?: () => boolean; getPlatform?: () => string };
+    }).Capacitor;
+    return Boolean(capacitor?.isNativePlatform?.()) && capacitor?.getPlatform?.() === "android";
   } catch {
     return false;
   }
@@ -67,7 +71,7 @@ function isPrivateNetworkUrl(value: string): boolean {
 }
 
 function shouldPreferNativeHttpTransport(url: string): boolean {
-  if (!isNativeCapacitorRuntime()) return false;
+  if (!isAndroidCapacitorRuntime()) return false;
   try {
     return new URL(url).protocol === "http:";
   } catch {
@@ -174,7 +178,7 @@ async function requestNoteAttachmentAccess(
   ) return 0;
 
   const fetchImpl = options.fetchImpl ?? fetch;
-  const allowNativeFallback = options.fetchImpl === undefined && isNativeCapacitorRuntime();
+  const allowNativeFallback = options.fetchImpl === undefined && isAndroidCapacitorRuntime();
   const preferNative = allowNativeFallback && shouldPreferNativeHttpTransport(url);
   const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
   const timer = controller

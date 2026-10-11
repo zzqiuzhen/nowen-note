@@ -34,8 +34,8 @@ export default function KnowledgeSearchScopeMenuButton({
         anchor={buttonRef.current}
         ariaLabel="搜索范围"
         items={[
-          { value: "tree", label: "目录与文档名称", checked: scope === "tree" },
           { value: "content", label: "笔记标题与正文", checked: scope === "content" },
+          { value: "tree", label: "目录与文档名称", checked: scope === "tree" },
         ]}
         onSelect={(value) => {
           setOpen(false);

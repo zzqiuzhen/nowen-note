@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, ChevronRight, PanelLeft, PanelTopClose, PanelTopOpen, Settings, Tags, Trash2, X, CircleDot, Bell } from "lucide-react";
+import { ChevronDown, ChevronRight, Files, PanelLeft, PanelTopClose, PanelTopOpen, Search, Settings, Tags, Trash2, X, CircleDot, Bell } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import KnowledgeTreePanel, {
@@ -103,6 +103,34 @@ export default function Sidebar({ variant = "mobile" }: { variant?: "desktop" | 
   const tagLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tagLongPressFired = useRef(false);
   const noteWorkspaceActive = !["tasks", "mindmaps", "ai-chat", "diary", "files", "shares", "issues"].includes(state.viewMode);
+
+  /**
+   * 侧栏快捷入口（移动端笔记侧栏）：
+   *   1) 搜索 —— 进入全文搜索视图，默认搜“正文”（标题+内容），需要时可用范围控件切到“目录”；
+   *   2) 所有笔记 —— 清空笔记本 / 标签 / 搜索词，回到 all 视图。
+   */
+  const openSidebarContentSearch = useCallback(() => {
+    actions.setSelectedNotebook(null);
+    actions.clearSelectedTags();
+    actions.setSearchQuery("");
+    actions.setViewMode("search");
+    actions.setMobileView("list");
+    window.setTimeout(() => {
+      const input = document.querySelector<HTMLInputElement>(
+        "[data-mobile-knowledge-tree-search],[data-knowledge-tree-search]",
+      );
+      input?.focus();
+    }, 80);
+  }, [actions]);
+
+  const openSidebarAllNotes = useCallback(() => {
+    actions.setSelectedNotebook(null);
+    actions.clearSelectedTags();
+    actions.setSearchQuery("");
+    actions.setViewMode("all");
+    actions.setMobileView("list");
+    actions.setMobileSidebar(false);
+  }, [actions]);
 
   const [tagsExpanded, setTagsExpanded] = useState(() => {
     try {
@@ -317,6 +345,34 @@ export default function Sidebar({ variant = "mobile" }: { variant?: "desktop" | 
       {(variant !== "mobile" || !mobileControlsCollapsed) && (
         <div className="shrink-0 px-3 py-2">
           <WorkspaceSwitcher />
+        </div>
+      )}
+
+      {variant === "mobile" && (
+        <div className="flex shrink-0 flex-col gap-1 px-3 pb-2" data-sidebar-quick-actions="">
+          <button
+            type="button"
+            onClick={openSidebarContentSearch}
+            title="搜索笔记标题与正文（可切换到目录）"
+            aria-label="搜索笔记标题与正文"
+            data-sidebar-quick-action="search"
+            className="flex h-8 w-full items-center gap-1.5 rounded-md px-2 text-left text-[11px] font-medium text-tx-secondary transition-colors hover:bg-app-hover hover:text-tx-primary"
+          >
+            <Search size={14} className="shrink-0 text-accent-primary" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate">搜索</span>
+            <span className="shrink-0 text-[10px] text-tx-tertiary">正文</span>
+          </button>
+          <button
+            type="button"
+            onClick={openSidebarAllNotes}
+            title="显示所有笔记"
+            aria-label="显示所有笔记"
+            data-sidebar-quick-action="all-notes"
+            className="flex h-8 w-full items-center gap-1.5 rounded-md px-2 text-left text-[11px] font-medium text-tx-secondary transition-colors hover:bg-app-hover hover:text-tx-primary"
+          >
+            <Files size={14} className="shrink-0 text-accent-primary" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate">所有笔记</span>
+          </button>
         </div>
       )}
 

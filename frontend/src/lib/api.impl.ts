@@ -253,6 +253,12 @@ export function isNativeCapacitor(): boolean {
   return typeof window !== "undefined" && !!(window as any).Capacitor?.isNativePlatform?.();
 }
 
+// CapacitorHttp 只在 Android 注册（iOS 构建在 capacitor.config.json 里显式关闭），
+// 任何原生 HTTP 回退都必须限定在 Android，否则 iOS 会抛 “not implemented on ios”。
+export function isAndroidCapacitor(): boolean {
+  return isNativeCapacitor() && (window as any).Capacitor?.getPlatform?.() === "android";
+}
+
 export function isAndroidInvalidServerUrl(url: string): boolean {
   if (!url) return true;
   try {
@@ -850,7 +856,7 @@ async function requestInternal<T>(url: string, options?: RequestOptions): Promis
       ...restOptions?.headers,
     });
     const tryNativeFallback = async (error: unknown, includeConnId: boolean): Promise<Response | null> => {
-      if (!isNativeCapacitor()) return null;
+      if (!isAndroidCapacitor()) return null;
       if (!shouldTryNativeHttpFallback(error, method)) return null;
       try {
         const nativeRes = await nativeHttpFetch(fullUrl, {

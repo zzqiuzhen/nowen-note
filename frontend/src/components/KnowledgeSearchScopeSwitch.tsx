@@ -25,8 +25,9 @@ export default function KnowledgeSearchScopeSwitch({
       )}
     >
       {([
-        ["tree", treeLabel, "仅筛选目录和文档名称"],
+        // 正文优先：搜索默认搜笔记标题与正文，目录/文档名筛选是次要选项。
         ["content", contentLabel, "搜索笔记标题与正文"],
+        ["tree", treeLabel, "仅筛选目录和文档名称"],
       ] as const).map(([value, label, title]) => (
         <button
           key={value}

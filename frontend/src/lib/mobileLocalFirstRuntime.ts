@@ -28,6 +28,7 @@ import {
   MOBILE_LOCAL_USER_ID,
   MobileLocalModeRemoteRequestError,
   isMobileLocalMode,
+  isAndroidNativeRuntime,
 } from "./mobileLocalMode";
 
 const MIGRATION_KEY = "indexeddbMigrationV1";
@@ -574,6 +575,14 @@ function scheduleConfigure(): void {
 /** 原生端启动入口。失败时保留既有远端路径，避免阻断登录或首屏。 */
 export async function initializeMobileLocalFirstRuntime(): Promise<void> {
   if (!Capacitor.isNativePlatform()) return;
+  // Android-only native runtime.
+  //
+  // installMobileLocalFirstBridge replaces the whole api data layer (notes, notebooks, tags,
+  // attachments, search) with the on-device SQLite repository. That store is fed by the mobile
+  // sync/attachment pipeline, which depends on Android-only native pieces; on iOS it stays
+  // empty, so note lists come back empty and reads throw “笔记不存在” while the server (PC /
+  // web / NAS) serves the very same notes. Keep iOS on the server path.
+  if (!isAndroidNativeRuntime()) return;
   if (!globalListenersInstalled) {
     globalListenersInstalled = true;
     window.addEventListener("nowen:token-changed",scheduleConfigure);
