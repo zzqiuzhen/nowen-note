@@ -849,14 +849,14 @@ function AppLayout() {
               onPointerDown={handleSidebarBackdropPointerDown}
               onPointerUp={handleSidebarBackdropPointerUp}
               onPointerCancel={handleSidebarBackdropPointerCancel}
-              className="fixed inset-0 z-40 bg-zinc-900/60 backdrop-blur-sm md:hidden"
+              className="fixed inset-0 z-40 bg-zinc-900/60 md:hidden"
             />
             <motion.div
               initial={{ x: "-100%" }}
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
-              transition={{ type: "spring", bounce: 0, duration: 0.35 }}
-              className="fixed inset-y-0 left-0 z-50 flex w-screen max-w-none overflow-hidden shadow-2xl md:hidden"
+              transition={{ type: "tween", ease: [0.22, 1, 0.36, 1], duration: 0.22 }}
+              className="fixed inset-y-0 left-0 z-50 flex w-screen max-w-none transform-gpu overflow-hidden shadow-2xl will-change-transform md:hidden"
               // 底部避让 home indicator / 手势栏：抽屉容器统一处理，
               // 内部 NavRail / Sidebar 不再各自加 safe-area-bottom，避免重复 padding。
               // 顶部状态栏避让仍由 NavRail / Sidebar Header 各自的 paddingTop 处理

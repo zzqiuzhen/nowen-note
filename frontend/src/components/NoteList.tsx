@@ -2,7 +2,7 @@ import { openAICollaboration } from "@/lib/aiCollaboration";
 import React, { useEffect, useCallback, useState, useRef, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Pin, PinOff, Star, StarOff, Clock, FileText, FileCode, FileType2, Trash2, Menu, SlidersHorizontal, FolderInput, ChevronRight, ChevronDown, ChevronLeft, Folder, X, Check, Lock, Unlock, CalendarDays, RefreshCw, Share2, GripVertical, Download, ArrowUpDown, ArrowUp, ArrowDown, Image as ImageIcon, Printer, User as UserIcon, Sparkles, Tag as TagIcon, Loader2, FileUp, AlertTriangle, Copy, LayoutTemplate, SplitSquareHorizontal, SplitSquareVertical, ArrowLeftRight, Pencil, ShieldCheck, Palette } from "lucide-react";
+import { Plus, Pin, PinOff, Star, StarOff, Clock, FileText, FileCode, FileType2, Trash2, Menu, Search, SlidersHorizontal, FolderInput, ChevronRight, ChevronDown, ChevronLeft, Folder, X, Check, Lock, Unlock, CalendarDays, RefreshCw, Share2, GripVertical, Download, ArrowUpDown, ArrowUp, ArrowDown, Image as ImageIcon, Printer, User as UserIcon, Sparkles, Tag as TagIcon, Loader2, FileUp, AlertTriangle, Copy, LayoutTemplate, SplitSquareHorizontal, SplitSquareVertical, ArrowLeftRight, Pencil, ShieldCheck, Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import ContextMenu, { ContextMenuItem } from "@/components/ContextMenu";
@@ -3514,6 +3514,23 @@ export default function NoteList({ directorySearchActive = false }: { directoryS
 
         </div>
       </header>
+
+      {/* 所有笔记主界面顶部的搜索入口：打开命令面板里的搜索（默认全文，面板内可切到目录）。 */}
+      {state.viewMode !== "search" && (
+        <div className="md:hidden shrink-0 px-3 pt-2 pb-1" data-note-list-search-entry="">
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new CustomEvent("nowen:open-command-palette"))}
+            aria-label="搜索笔记标题与正文"
+            title="搜索笔记标题与正文（可切换到目录）"
+            className="flex h-9 w-full items-center gap-2 rounded-xl border border-app-border bg-app-hover px-3 text-left text-xs text-tx-tertiary transition-colors active:bg-app-active"
+          >
+            <Search size={15} className="shrink-0 text-tx-tertiary" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate">搜索笔记标题与正文</span>
+            <span className="shrink-0 rounded-md bg-app-surface px-1.5 py-0.5 text-[10px] text-tx-tertiary">全文</span>
+          </button>
+        </div>
+      )}
 
       {/* Desktop Header */}
       <div

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, ChevronRight, PanelLeft, PanelTopClose, PanelTopOpen, Settings, Tags, Trash2, X, CircleDot, Bell, Search } from "lucide-react";
+import { ChevronDown, ChevronRight, Files, PanelLeft, PanelTopClose, PanelTopOpen, Settings, Tags, Trash2, X, CircleDot, Bell, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import KnowledgeTreePanel, {
@@ -105,6 +105,16 @@ export default function Sidebar({ variant = "mobile" }: { variant?: "desktop" | 
   const tagLongPressFired = useRef(false);
   const noteWorkspaceActive = !["tasks", "mindmaps", "ai-chat", "diary", "files", "shares", "issues"].includes(state.viewMode);
 
+  /** 侧栏快捷入口：清空笔记本 / 标签 / 搜索词，回到「所有笔记」。 */
+  const openSidebarAllNotes = useCallback(() => {
+    actions.setSelectedNotebook(null);
+    actions.clearSelectedTags();
+    actions.setSearchQuery("");
+    actions.setViewMode("all");
+    actions.setMobileView("list");
+    actions.setMobileSidebar(false);
+  }, [actions]);
+
   const [tagsExpanded, setTagsExpanded] = useState(() => {
     try {
       const saved = localStorage.getItem("nowen-tags-expanded");
@@ -148,15 +158,23 @@ export default function Sidebar({ variant = "mobile" }: { variant?: "desktop" | 
   }, [actions]);
 
   useEffect(() => {
-    void refreshSidebarData();
+    // 移动端抽屉是「打开才挂载」的：这里的取数 + setNotebooks/setTags 会正好压在抽屉的开场
+    // 动画上，造成明显掉帧。把首次取数挪到动画结束之后；桌面端侧栏常驻，行为不变。
+    let cancelled = false;
+    const initialDelay = variant === "mobile" ? 280 : 0;
+    const initialTimer = window.setTimeout(() => {
+      if (!cancelled) void refreshSidebarData();
+    }, initialDelay);
     const refresh = () => void refreshSidebarData();
     window.addEventListener("nowen:workspace-changed", refresh);
     window.addEventListener(KNOWLEDGE_TREE_CHANGED_EVENT, refresh);
     return () => {
+      cancelled = true;
+      window.clearTimeout(initialTimer);
       window.removeEventListener("nowen:workspace-changed", refresh);
       window.removeEventListener(KNOWLEDGE_TREE_CHANGED_EVENT, refresh);
     };
-  }, [refreshSidebarData]);
+  }, [refreshSidebarData, variant]);
 
   useEffect(() => {
     if (variant !== "desktop") return;
@@ -323,6 +341,22 @@ export default function Sidebar({ variant = "mobile" }: { variant?: "desktop" | 
       {(variant !== "mobile" || !mobileControlsCollapsed) && (
         <div className="shrink-0 px-3 py-2">
           <WorkspaceSwitcher />
+        </div>
+      )}
+
+      {variant === "mobile" && (
+        <div className="flex shrink-0 flex-col gap-1 px-3 pb-2" data-sidebar-quick-actions="">
+          <button
+            type="button"
+            onClick={openSidebarAllNotes}
+            title="显示所有笔记"
+            aria-label="显示所有笔记"
+            data-sidebar-quick-action="all-notes"
+            className="flex h-8 w-full items-center gap-1.5 rounded-md px-2 text-left text-[11px] font-medium text-tx-secondary transition-colors hover:bg-app-hover hover:text-tx-primary"
+          >
+            <Files size={14} className="shrink-0 text-accent-primary" aria-hidden="true" />
+            <span className="min-w-0 flex-1 truncate">所有笔记</span>
+          </button>
         </div>
       )}
 
