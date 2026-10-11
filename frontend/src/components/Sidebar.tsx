@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, ChevronRight, Files, PanelLeft, PanelTopClose, PanelTopOpen, Search, Settings, Tags, Trash2, X, CircleDot, Bell } from "lucide-react";
+import { ChevronDown, ChevronRight, Files, PanelLeft, PanelTopClose, PanelTopOpen, Settings, Tags, Trash2, X, CircleDot, Bell } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import KnowledgeTreePanel, {
@@ -104,25 +104,7 @@ export default function Sidebar({ variant = "mobile" }: { variant?: "desktop" | 
   const tagLongPressFired = useRef(false);
   const noteWorkspaceActive = !["tasks", "mindmaps", "ai-chat", "diary", "files", "shares", "issues"].includes(state.viewMode);
 
-  /**
-   * 侧栏快捷入口（移动端笔记侧栏）：
-   *   1) 搜索 —— 进入全文搜索视图，默认搜“正文”（标题+内容），需要时可用范围控件切到“目录”；
-   *   2) 所有笔记 —— 清空笔记本 / 标签 / 搜索词，回到 all 视图。
-   */
-  const openSidebarContentSearch = useCallback(() => {
-    actions.setSelectedNotebook(null);
-    actions.clearSelectedTags();
-    actions.setSearchQuery("");
-    actions.setViewMode("search");
-    actions.setMobileView("list");
-    window.setTimeout(() => {
-      const input = document.querySelector<HTMLInputElement>(
-        "[data-mobile-knowledge-tree-search],[data-knowledge-tree-search]",
-      );
-      input?.focus();
-    }, 80);
-  }, [actions]);
-
+  /** 侧栏快捷入口：清空笔记本 / 标签 / 搜索词，回到「所有笔记」。 */
   const openSidebarAllNotes = useCallback(() => {
     actions.setSelectedNotebook(null);
     actions.clearSelectedTags();
@@ -170,15 +152,23 @@ export default function Sidebar({ variant = "mobile" }: { variant?: "desktop" | 
   }, [actions]);
 
   useEffect(() => {
-    void refreshSidebarData();
+    // 移动端抽屉是「打开才挂载」的：这里的取数 + setNotebooks/setTags 会正好压在抽屉的开场
+    // 动画上，造成明显掉帧。把首次取数挪到动画结束之后；桌面端侧栏常驻，行为不变。
+    let cancelled = false;
+    const initialDelay = variant === "mobile" ? 280 : 0;
+    const initialTimer = window.setTimeout(() => {
+      if (!cancelled) void refreshSidebarData();
+    }, initialDelay);
     const refresh = () => void refreshSidebarData();
     window.addEventListener("nowen:workspace-changed", refresh);
     window.addEventListener(KNOWLEDGE_TREE_CHANGED_EVENT, refresh);
     return () => {
+      cancelled = true;
+      window.clearTimeout(initialTimer);
       window.removeEventListener("nowen:workspace-changed", refresh);
       window.removeEventListener(KNOWLEDGE_TREE_CHANGED_EVENT, refresh);
     };
-  }, [refreshSidebarData]);
+  }, [refreshSidebarData, variant]);
 
   useEffect(() => {
     if (variant !== "desktop") return;
@@ -350,18 +340,6 @@ export default function Sidebar({ variant = "mobile" }: { variant?: "desktop" | 
 
       {variant === "mobile" && (
         <div className="flex shrink-0 flex-col gap-1 px-3 pb-2" data-sidebar-quick-actions="">
-          <button
-            type="button"
-            onClick={openSidebarContentSearch}
-            title="搜索笔记标题与正文（可切换到目录）"
-            aria-label="搜索笔记标题与正文"
-            data-sidebar-quick-action="search"
-            className="flex h-8 w-full items-center gap-1.5 rounded-md px-2 text-left text-[11px] font-medium text-tx-secondary transition-colors hover:bg-app-hover hover:text-tx-primary"
-          >
-            <Search size={14} className="shrink-0 text-accent-primary" aria-hidden="true" />
-            <span className="min-w-0 flex-1 truncate">搜索</span>
-            <span className="shrink-0 text-[10px] text-tx-tertiary">正文</span>
-          </button>
           <button
             type="button"
             onClick={openSidebarAllNotes}
