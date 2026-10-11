@@ -882,6 +882,7 @@ function AppLayout() {
               </div>
             </motion.div>
         </>
+      </AnimatePresence>
 
       {/* ===== 桌面端：永久 Rail + 可折叠主侧栏 + 拖拽条 =====
           v16 P3：左侧 Rail 永久可见（含模块切换 + 设置/登出 + 折叠按钮）；
