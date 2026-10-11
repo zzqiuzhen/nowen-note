@@ -3433,6 +3433,19 @@ export default function NoteList({ directorySearchActive = false }: { directoryS
     }
   }, [dragOverNoteId, sortedNotes, actions, fetchNotes]);
 
+  /** 当前笔记本的父笔记本（列表页「上一层」用）。 */
+  const parentNotebookOfCurrent = useMemo(() => {
+    const current = state.notebooks.find((nb) => nb.id === state.selectedNotebookId);
+    if (!current || !current.parentId) return null;
+    return state.notebooks.find((nb) => nb.id === current.parentId) || null;
+  }, [state.notebooks, state.selectedNotebookId]);
+
+  const goUpOneNotebookLevelFromList = useCallback(() => {
+    const parent = parentNotebookOfCurrent;
+    actions.setSelectedNotebook(parent ? parent.id : null);
+    actions.setViewMode(parent ? "notebook" : "all");
+  }, [actions, parentNotebookOfCurrent]);
+
   const viewTitles: Record<string, string> = {
     all: t('noteList.allNotes'),
     notebook: state.notebooks.find((n) => n.id === state.selectedNotebookId)?.name || t('noteList.notebook'),
@@ -3457,6 +3470,18 @@ export default function NoteList({ directorySearchActive = false }: { directoryS
         >
           <Menu size={24} />
         </button>
+        {state.viewMode === "notebook" && (
+          <button
+            type="button"
+            data-mobile-notebook-up
+            onClick={goUpOneNotebookLevelFromList}
+            className="shrink-0 -ml-1 rounded-lg p-1.5 text-tx-secondary active:bg-app-active"
+            aria-label="返回上一层"
+            title={parentNotebookOfCurrent ? `返回「${parentNotebookOfCurrent.name}」` : "返回所有笔记"}
+          >
+            <ChevronLeft size={20} />
+          </button>
+        )}
         <h2 className="min-w-0 flex-1 truncate text-center text-sm font-semibold text-tx-primary">{viewTitles[state.viewMode]}</h2>
         <div className="flex shrink-0 items-center gap-1 relative">
           <button onClick={openAICollaboration} aria-label={t("aiCollaboration.entry")} title={t("aiCollaboration.entry")} className="shrink-0 rounded-lg p-2 text-accent-primary hover:bg-app-hover"><Sparkles size={18} /></button>

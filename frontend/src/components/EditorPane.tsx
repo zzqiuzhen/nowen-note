@@ -7,7 +7,7 @@ import { getOfflineQueueStorageKey } from "@/lib/offlineScope";
 import { Capacitor } from "@capacitor/core";
 import { isEncryptedNoteFormat, sameConversionContent } from "@/lib/encryptedNotes/noteDocument";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { Star, Pin, Trash2, Cloud, RefreshCw, Check, Loader2, ChevronLeft, FolderInput, ChevronRight, ChevronDown, X, ListTree, Lock, Unlock, Tag as TagIcon, Type, MoreHorizontal, Share2, History, MessageCircle, FileCode, FileText, Eye, Pencil, Paperclip, Search, Sparkles, Network, Minimize2, Image, Link2, Printer, Scissors } from "lucide-react";
+import { Star, Pin, Trash2, Cloud, RefreshCw, Check, Loader2, ChevronLeft, FolderInput, ChevronRight, ChevronDown, X, ListTree, Lock, Unlock, Tag as TagIcon, Type, MoreHorizontal, Share2, History, MessageCircle, FileCode, FileText, Files, Eye, Pencil, Paperclip, Search, Sparkles, Network, Minimize2, Image, Link2, Printer, Scissors } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { confirm } from "@/components/ui/confirm";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -2582,6 +2582,23 @@ const moveToTrash = useCallback(async () => {
     [state.notebooks, activeNote?.notebookId]
   );
 
+  /** 打开某个笔记本的笔记列表（面包屑每一段都可点，也用于「上一层」）。 */
+  const openNotebookNotes = useCallback((notebookId: string | null) => {
+    actions.setSelectedNotebook(notebookId);
+    actions.clearSelectedTags();
+    actions.setSearchQuery("");
+    actions.setViewMode(notebookId ? "notebook" : "all");
+    actions.setMobileView("list");
+  }, [actions]);
+
+  /** 顶部返回：沿笔记本层级逐级上退（腾讯自建笔记 → AI → 个人日记 → 所有笔记）。 */
+  const goUpOneNotebookLevel = useCallback(() => {
+    const parent = currentPath.length > 1 ? currentPath[currentPath.length - 2] : null;
+    openNotebookNotes(parent ? parent.id : null);
+  }, [currentPath, openNotebookNotes]);
+
+  const openAllNotesFromEditor = useCallback(() => openNotebookNotes(null), [openNotebookNotes]);
+
   // ���� �ʼǼ����йǼ��� ����
   // �ڵ���ʼ��б������ݻ�û����ǰ��ʾ����̬
   if (noteLoading && !activeNote) {
@@ -2662,7 +2679,7 @@ const moveToTrash = useCallback(async () => {
         {compactMobileEditing ? (
           <button
             data-adaptive-editor-back
-            onClick={() => actions.setMobileView("list")}
+            onClick={goUpOneNotebookLevel}
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-accent-primary active:bg-app-hover"
             aria-label={t('editor.back')}
           >
@@ -2740,7 +2757,7 @@ const moveToTrash = useCallback(async () => {
         <div className="flex min-w-0 items-center gap-1.5 px-2 py-1.5">
           <button
             data-adaptive-editor-back
-            onClick={() => actions.setMobileView("list")}
+            onClick={goUpOneNotebookLevel}
             className="flex items-center text-accent-primary py-1 px-1 -ml-1 rounded-lg active:bg-app-hover shrink-0"
             aria-label={t('editor.back')}
           >
@@ -2748,11 +2765,7 @@ const moveToTrash = useCallback(async () => {
           </button>
           {/* ���м������·�������һ�μӴ�ǿ���������ɹ�������ضϳ� "..."
               �������"�ƶ����ʼǱ�"�˵�������������м�ɵ��������һ�£� */}
-          <button
-            onClick={() => { setShowMobileMenu(true); setShowMobileMoveMenu(true); }}
-            className="flex-1 min-w-0 flex items-center gap-1 text-xs text-tx-tertiary active:bg-app-hover rounded-md px-1.5 py-1 overflow-hidden"
-            title={t('editor.moveToNotebook')}
-          >
+          <div className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden text-xs text-tx-tertiary">
             {mobileTitlePinned ? (
               <span className="min-w-0 truncate text-sm font-semibold text-tx-primary">
                 {activeNote.title || t('editor.untitled')}
@@ -2764,10 +2777,17 @@ const moveToTrash = useCallback(async () => {
                   return (
                     <React.Fragment key={nb.id}>
                       {idx > 0 && <ChevronRight size={10} className="text-tx-tertiary/60 shrink-0" />}
-                      <span className={cn("flex min-w-0 items-center gap-0.5", isLast ? "text-tx-secondary font-medium" : "shrink-0")}>
+                      {/* 路径每一段都可点：直接查看该笔记本下的笔记列表 */}
+                      <button
+                        type="button"
+                        data-editor-path-segment={nb.id}
+                        onClick={() => openNotebookNotes(nb.id)}
+                        title={nb.name}
+                        className={cn("flex min-w-0 items-center gap-0.5 rounded px-0.5 py-0.5 active:bg-app-hover", isLast ? "text-tx-secondary font-medium" : "shrink-0")}
+                      >
                         <span className="leading-none">{getNotebookIcon(nb.icon)}</span>
                         <span className={cn("truncate", isLast ? "max-w-[120px]" : "max-w-[64px]")}>{nb.name}</span>
-                      </span>
+                      </button>
                     </React.Fragment>
                   );
                 })}
@@ -2775,6 +2795,26 @@ const moveToTrash = useCallback(async () => {
             ) : (
               <span className="shrink-0 leading-none">{getNotebookIcon()}</span>
             )}
+            <button
+              type="button"
+              onClick={() => { setShowMobileMenu(true); setShowMobileMoveMenu(true); }}
+              className="ml-auto shrink-0 rounded p-0.5 text-tx-tertiary active:bg-app-hover"
+              title={t('editor.moveToNotebook')}
+              aria-label={t('editor.moveToNotebook')}
+            >
+              <ChevronDown size={12} />
+            </button>
+          </div>
+          <button
+            type="button"
+            data-mobile-all-notes
+            onClick={openAllNotesFromEditor}
+            className="flex h-7 shrink-0 items-center gap-1 rounded-lg px-1.5 text-[11px] font-medium text-tx-secondary active:bg-app-hover"
+            title="回到所有笔记"
+            aria-label="回到所有笔记"
+          >
+            <Files size={15} className="shrink-0 text-accent-primary" aria-hidden="true" />
+            <span className="truncate">所有笔记</span>
           </button>
           <div className="shrink-0">
             <SyncIndicator syncStatus={syncStatus} lastSyncedAt={lastSyncedAt} onManualSync={handleManualSync} />
