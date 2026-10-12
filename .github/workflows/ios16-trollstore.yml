@@ -103,7 +103,7 @@ jobs:
 
           APP="$RUNNER_TEMP/App.xcarchive/Products/Applications/$APP_NAME.app"
           IPA_DIR="$RUNNER_TEMP/ipa"
-          IPA_NAME="Nowen-Note-iOS16-TrollStore-${{ inputs.version }}-${{ inputs.build_number }}.ipa"
+          IPA_NAME="Nowen-Note-${{ inputs.version }}.ipa"
 
           test -d "$APP"
           mkdir -p "$IPA_DIR/Payload"
@@ -165,7 +165,7 @@ jobs:
           set -euo pipefail
 
           IPA_SRC="${{ steps.package.outputs.ipa_path }}"
-          ASSET_NAME="Nowen-Note-iOS16-TrollStore-${RELEASE_VERSION}-${{ inputs.build_number }}.ipa"
+          ASSET_NAME="Nowen-Note-${RELEASE_VERSION}.ipa"
           ASSET_DIR="$RUNNER_TEMP/release"
           mkdir -p "$ASSET_DIR"
           cp "$IPA_SRC" "$ASSET_DIR/$ASSET_NAME"
@@ -177,7 +177,7 @@ jobs:
           NOTES="$ASSET_DIR/notes.md"
           {
             printf '# Nowen Note %s (iOS 16 TrollStore)\n\n' "$RELEASE_VERSION"
-            printf 'Ad-hoc signed iOS IPA for TrollStore on iOS 16, built from the upstream v%s source.\n\n' "$RELEASE_VERSION"
+            printf 'Ad-hoc signed iOS IPA for TrollStore on iOS 15-17, built from the upstream v%s source.\n\n' "$RELEASE_VERSION"
             printf -- '- Minimum iOS: %s\n' "${{ steps.package.outputs.minimum_ios }}"
             printf -- '- Build number: %s\n' "${{ inputs.build_number }}"
             printf -- '- Bundle ID: com.nowen.note\n'
@@ -194,7 +194,7 @@ jobs:
           gh release create "$RELEASE_TAG" \
             "$ASSET_DIR/$ASSET_NAME" \
             "$ASSET_DIR/$ASSET_NAME.sha256" \
-            --title "Nowen Note ${RELEASE_VERSION} (iOS 16 TrollStore)" \
+            --title "Nowen Note ${RELEASE_VERSION} (iOS / TrollStore)" \
             --notes-file "$NOTES" \
             --target "$GITHUB_SHA"
 

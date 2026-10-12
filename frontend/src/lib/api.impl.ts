@@ -4997,6 +4997,12 @@ export async function withSudo<T>(
 export interface ServerProbeResult {
   ok: boolean;
   error?: string;
+  /** 实际生效的服务器地址（可能是内网地址，或自动回退协议后的地址）。 */
+  endpointUrl?: string;
+  /** 生效地址的探活耗时（毫秒）。 */
+  latencyMs?: number;
+  /** 生效地址与用户填写的地址不同（协议回退 / 切到内网）。 */
+  endpointChanged?: boolean;
   serverBaseUrl?: string;
   apiBaseUrl?: string;
   websocketUrl?: string;
@@ -5014,6 +5020,20 @@ interface HealthProbeAttempt {
   error?: string;
   htmlResponse?: boolean;
   proxyRewrittenApiPath?: string;
+}
+
+/** 同一个地址常常只有一种协议可用（自建 NAS 只开 http、反代只开 https），用于第二阶段重试。 */
+function alternateSchemeBase(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const flipped = parsed.protocol === "https:" ? "http:" : parsed.protocol === "http:" ? "https:" : "";
+    if (!flipped) return "";
+    const alt = new URL(url);
+    alt.protocol = flipped;
+    return _normalizeBase(alt.toString());
+  } catch {
+    return "";
+  }
 }
 
 async function probeHealthCandidate(candidate: ServerPathCandidate): Promise<HealthProbeAttempt> {
@@ -5091,30 +5111,59 @@ async function probeWebSocketCandidate(websocketUrl: string): Promise<string | n
 }
 
 // 测试服务器连接（不需要 token），标准路径失败后才进入反向代理兼容探测。
-export async function testServerConnection(serverUrl: string): Promise<ServerProbeResult> {
+type ProbedHealthCandidate = { candidate: ServerPathCandidate; attempt: HealthProbeAttempt; latencyMs: number };
+
+export async function testServerConnection(
+  serverUrl: string,
+  options: { lanUrl?: string | null } = {},
+): Promise<ServerProbeResult> {
   const base = _normalizeBase(serverUrl);
   if (!base) return { ok: false, error: "服务器地址格式无效" };
+  const lanBase = options.lanUrl ? _normalizeBase(options.lanUrl) : "";
 
-  const candidates = _buildServerPathCandidates(base);
   const errors: string[] = [];
   let sawHtml = false;
-  let resolved: ServerPathCandidate | null = null;
-  let proxyRewrittenApiPath: string | undefined;
-  for (const candidate of candidates) {
-    const attempt = await probeHealthCandidate(candidate);
-    if (attempt.ok) {
-      resolved = candidate;
-      proxyRewrittenApiPath = attempt.proxyRewrittenApiPath;
-      break;
+  const record = (entries: ProbedHealthCandidate[]) => {
+    for (const entry of entries) {
+      if (entry.attempt.ok) continue;
+      sawHtml ||= entry.attempt.htmlResponse === true;
+      errors.push(`${entry.candidate.apiPath}（${entry.candidate.serverBaseUrl}）: ${entry.attempt.error || "不可用"}`);
     }
-    sawHtml ||= attempt.htmlResponse === true;
-    errors.push(`${candidate.apiPath}: ${attempt.error || "不可用"}`);
+  };
+  const pickFastest = (entries: ProbedHealthCandidate[]) =>
+    entries.filter((entry) => entry.attempt.ok).sort((a, b) => a.latencyMs - b.latencyMs)[0] || null;
+  const probeBases = (targets: string[]) => Promise.all(
+    targets.flatMap((target) => _buildServerPathCandidates(target)).map(async (candidate) => {
+      const started = Date.now();
+      const attempt = await probeHealthCandidate(candidate);
+      return { candidate, attempt, latencyMs: Math.max(0, Date.now() - started) };
+    }),
+  );
+
+  // 第一阶段：用户填的地址（公网）+ 可选的内网地址并发探测，取「可达且延迟最低」的。
+  const primaryTargets = [base, ...(lanBase && lanBase !== base ? [lanBase] : [])];
+  const firstPass = await probeBases(primaryTargets);
+  record(firstPass);
+  let winner = pickFastest(firstPass);
+  // 第二阶段：都不可达时，再用另一种协议（http <-> https）重试一遍。
+  if (!winner) {
+    const alternateTargets = [...new Set(primaryTargets.map(alternateSchemeBase).filter(Boolean))];
+    if (alternateTargets.length > 0) {
+      const secondPass = await probeBases(alternateTargets);
+      record(secondPass);
+      winner = pickFastest(secondPass);
+    }
   }
+
+  const candidates = _buildServerPathCandidates(base);
+  let resolved: ServerPathCandidate | null = winner ? winner.candidate : null;
+  let proxyRewrittenApiPath: string | undefined = winner?.attempt.proxyRewrittenApiPath;
+  const resolvedLatencyMs = winner?.latencyMs;
 
   if (!resolved) {
     const error = sawHtml
       ? "检测到可访问的网页，但标准及兼容 API 路径均不可用。请检查反向代理是否转发 API 请求。"
-      : `未检测到 Nowen Note API（${errors.join("；")}）`;
+      : `未检测到 Nowen Note API（${errors.join("；")}）。已同时尝试 http 与 https 两种协议。`;
     console.error("[api] server probe failed", { serverUrl: base, errors });
     return { ok: false, apiOk: false, websocketOk: false, error };
   }
@@ -5160,6 +5209,9 @@ export async function testServerConnection(serverUrl: string): Promise<ServerPro
     proxyRewrittenWebsocketPath,
     apiOk: true,
     websocketOk,
+    endpointUrl: resolved.serverBaseUrl,
+    latencyMs: resolvedLatencyMs,
+    endpointChanged: resolved.serverBaseUrl !== base,
   };
 }
 
