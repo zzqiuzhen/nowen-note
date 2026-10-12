@@ -11,6 +11,7 @@ import {
   testServerConnection,
 } from "@/lib/api";
 import { buildServerUrl, getResolvedApiBaseUrl, isLanServerHostname, parseServerUrl, type ServerAddressParts } from "@/lib/serverUrl";
+import { rememberServerLanEndpoint } from "@/lib/serverEndpointState";
 import { safeLoginRequestTarget } from "@/lib/loginRequestDiagnostics";
 import ServerAddressInput from "@/components/ServerAddressInput";
 import LanDiscoveryPanel from "@/components/LanDiscoveryPanel";
@@ -75,6 +76,13 @@ export default function LoginPage({ onLogin, onAccountLogin, isClientMode = fals
     path: "",
   });
   const [serverStatus, setServerStatus] = useState<"idle" | "checking" | "ok" | "fail">("idle");
+  // 可选的内网地址：与公网地址并发探活，自动选延迟更低的那个。
+  const [lanParts, setLanParts] = useState<ServerAddressParts>({
+    protocol: "http",
+    host: "",
+    port: "",
+    path: "",
+  });
   const [serverNotice, setServerNotice] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -313,7 +321,8 @@ export default function LoginPage({ onLogin, onAccountLogin, isClientMode = fals
     }
     setServerStatus("checking");
     setServerNotice("");
-    const result = await testServerConnection(url);
+    const lanUrl = buildServerUrl(lanParts) || null;
+    const result = await testServerConnection(url, { lanUrl });
     if (epoch !== serverProbeEpochRef.current) return;
     setServerStatus(result.ok ? "ok" : "fail");
     if (result.ok) {
@@ -379,7 +388,8 @@ export default function LoginPage({ onLogin, onAccountLogin, isClientMode = fals
     }
     setServerStatus("checking");
     setServerNotice("");
-    const result = await testServerConnection(url);
+    const lanUrl = buildServerUrl(lanParts) || null;
+    const result = await testServerConnection(url, { lanUrl });
     if (!result.ok) {
       if (isDesktopClient && isUgreenRemoteAccessUrl(url)) {
         await beginUgreenAuthorization(url);
@@ -407,9 +417,15 @@ export default function LoginPage({ onLogin, onAccountLogin, isClientMode = fals
         : "",
       result.websocketOk === false ? t("server.websocketUnavailable") : "",
     ].filter(Boolean);
-    setServerNotice(notices.join(" "));
+    setServerNotice([
+      ...notices,
+      result.endpointChanged && result.endpointUrl
+        ? `已自动使用 ${result.endpointUrl}（${result.latencyMs ?? "?"}ms）`
+        : "",
+    ].filter(Boolean).join(" "));
     setServerUrl(url);
     localStorage.setItem("nowen-server-url-last", url);
+    rememberServerLanEndpoint(url, lanUrl);
     return url;
   };
 
@@ -858,6 +874,19 @@ export default function LoginPage({ onLogin, onAccountLogin, isClientMode = fals
                     rightSlot={serverStatusIcon()}
                   />
                   <p className="text-xs text-zinc-400 dark:text-zinc-500">{t("auth.serverHint")}</p>
+                  <div className="space-y-1.5 pt-1.5">
+                    <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">内网地址（可选）</label>
+                    <ServerAddressInput
+                      value={lanParts}
+                      onChange={(next) => {
+                        serverProbeEpochRef.current += 1;
+                        setLanParts(next);
+                        if (serverStatus !== "idle") setServerStatus("idle");
+                        if (serverNotice) setServerNotice("");
+                      }}
+                    />
+                    <p className="text-xs text-zinc-400 dark:text-zinc-500">填了内网地址后，登录与同步会自动在公网 / 内网之间选择延迟更低的那个（例如 http://192.168.5.112:3501）。</p>
+                  </div>
                   {serverNotice && (
                     <p className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-2 text-xs leading-5 text-amber-700 dark:border-amber-500/25 dark:bg-amber-500/10 dark:text-amber-300">
                       {serverNotice}

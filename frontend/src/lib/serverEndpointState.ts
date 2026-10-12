@@ -5,9 +5,12 @@ const PREFERENCES_KEY = "nowen-server-endpoint-preferences-v1";
 interface EndpointPreferences {
   automatic: boolean;
   serverInstanceId: string | null;
+  /** 用户手动填写的内网地址；公网不可达时优先用它，无需 Bonjour 发现。 */
+  lanUrl?: string | null;
 }
 
 export interface ServerEndpointSnapshot extends EndpointPreferences {
+  lanUrl?: string | null;
   serverUrl: string;
   endpointUrl: string;
   kind: "configured" | "lan";
@@ -32,6 +35,7 @@ export function getServerEndpointSnapshot(serverUrl: string): ServerEndpointSnap
     name: selected?.name,
     automatic,
     serverInstanceId: typeof saved?.serverInstanceId === "string" ? saved.serverInstanceId : null,
+    lanUrl: typeof saved?.lanUrl === "string" && saved.lanUrl ? saved.lanUrl : null,
   };
 }
 
@@ -68,5 +72,16 @@ export function setAutomaticServerEndpoint(serverUrl: string, automatic: boolean
   const current = getServerEndpointSnapshot(serverUrl);
   // 先复原路径，保证 WebSocket 能收到真实的端点变化。
   if (!automatic) setServerTransportEndpoint(serverUrl, serverUrl);
-  savePreferences(serverUrl, { automatic, serverInstanceId: current.serverInstanceId });
+  savePreferences(serverUrl, { automatic, serverInstanceId: current.serverInstanceId, lanUrl: current.lanUrl });
+}
+
+/** 记住用户填写的内网地址（登录页可选填），供公网不可达时自动切换。 */
+export function rememberServerLanEndpoint(serverUrl: string, lanUrl: string | null): void {
+  if (!serverUrl) return;
+  const current = getServerEndpointSnapshot(serverUrl);
+  savePreferences(serverUrl, {
+    automatic: current.automatic,
+    serverInstanceId: current.serverInstanceId,
+    lanUrl: lanUrl || null,
+  });
 }

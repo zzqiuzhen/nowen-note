@@ -87,7 +87,19 @@ export class ServerEndpointResolver {
       return;
     }
     const settings = getServerEndpointSnapshot(this.serverUrl);
-    if (!settings.automatic || network.connectionType !== "wifi" || !settings.serverInstanceId) return;
+    if (!settings.automatic || network.connectionType !== "wifi") return;
+    // 登录页手动填写的内网地址优先于 Bonjour 发现，且同样要核对服务器身份。
+    if (settings.lanUrl && settings.lanUrl !== this.serverUrl) {
+      const manual = await this.probe(settings.lanUrl, controller.signal);
+      if (!current()) return;
+      const expected = getServerEndpointSnapshot(this.serverUrl).serverInstanceId;
+      if (manual && (!expected || !manual.serverInstanceId || manual.serverInstanceId === expected)) {
+        cacheResolvedServerConnection(manual.connection);
+        setServerTransportEndpoint(this.serverUrl, manual.connection.serverBaseUrl, "内网");
+        return;
+      }
+    }
+    if (!settings.serverInstanceId) return;
     const lan = await this.findLan(settings.serverInstanceId, controller.signal);
     if (!current() || !lan || !getServerEndpointSnapshot(this.serverUrl).automatic) return;
     cacheResolvedServerConnection(lan.endpoint.connection);
