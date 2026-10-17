@@ -8,6 +8,7 @@ import {
   getTaskNotificationPermission,
   getTaskNotificationSurface,
   registerTaskNotificationActionListener,
+  requestTaskNotificationPermission,
   showImmediateTaskNotification,
   syncNativeTaskNotifications,
   wasTaskReminderScheduledNatively,
@@ -65,6 +66,7 @@ export function useReminderNotifier(onOpenTask?: (taskId: string) => void) {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastScanRef = useRef<number>(Date.now());
   const nativeSchedulesReadyRef = useRef(false);
+  const permissionRequestedRef = useRef(false);
   const onOpenTaskRef = useRef(onOpenTask);
   onOpenTaskRef.current = onOpenTask;
 
@@ -76,7 +78,13 @@ export function useReminderNotifier(onOpenTask?: (taskId: string) => void) {
     const syncNativeSchedules = async (): Promise<boolean> => {
       if (getTaskNotificationSurface() !== "native") return true;
       try {
-        const permission = await getTaskNotificationPermission();
+        let permission = await getTaskNotificationPermission();
+        // 首次启动从来没申请过权限时（iOS 全新安装的默认状态），
+        // 用户不主动进「提醒中心」就永远收不到任何通知。这里自动申请一次。
+        if (permission === "prompt" && !permissionRequestedRef.current) {
+          permissionRequestedRef.current = true;
+          permission = await requestTaskNotificationPermission();
+        }
         if (permission !== "granted") {
           nativeSchedulesReadyRef.current = false;
           return false;
@@ -230,12 +238,14 @@ export function useReminderNotifier(onOpenTask?: (taskId: string) => void) {
     window.addEventListener("nowen:workspace-changed", onScheduleChanged);
     window.addEventListener("nowen:token-changed", resetNativeSchedules);
 
-    void syncNativeSchedules();
+    // 延迟一拍再同步：权限弹窗不要压在启动动画上，也避免和首屏渲染抢主线程。
+    const initialSyncTimeout = setTimeout(() => { void syncNativeSchedules(); }, 1200);
     const initialTimeout = setTimeout(() => { void scan(); }, 3_000);
     if (document.visibilityState === "visible") startPolling();
 
     return () => {
       disposed = true;
+      clearTimeout(initialSyncTimeout);
       clearTimeout(initialTimeout);
       stopPolling();
       removeActionListener?.();

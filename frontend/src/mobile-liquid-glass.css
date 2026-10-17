@@ -33,7 +33,6 @@
     /* 基础渐变兜底：即使 ::before 的极光层被系统关闭，也不会露出纯白/纯黑。 */
     background:
       linear-gradient(180deg, rgba(244, 247, 252, 0.96), rgba(238, 242, 249, 0.96)) !important;
-    transition: padding-bottom 0.2s ease;
   }
 
   .dark [data-liquid-shell] {
@@ -41,40 +40,36 @@
       linear-gradient(180deg, rgba(13, 15, 20, 0.98), rgba(10, 12, 16, 0.98)) !important;
   }
 
-  [data-liquid-shell][data-mobile-tabbar="on"] {
-    padding-bottom: var(--mobile-tabbar-space);
-  }
+  /* 底栏是悬浮层：外壳不再预留任何空间（旧版 padding-bottom 会白占一条），
+     内容一直铺到屏幕底部，滚到底部的避让由各滚动容器自己的 padding-bottom 负责。 */
 
   [data-liquid-shell]::before {
     content: "";
     position: fixed;
-    inset: -25%;
+    inset: 0;
     z-index: -1;
     pointer-events: none;
     background:
-      radial-gradient(38% 32% at 18% 12%, rgba(96, 165, 250, 0.42), transparent 70%),
-      radial-gradient(36% 30% at 86% 20%, rgba(129, 140, 248, 0.38), transparent 68%),
-      radial-gradient(42% 36% at 62% 88%, rgba(244, 114, 182, 0.30), transparent 72%),
-      radial-gradient(40% 34% at 8% 78%, rgba(45, 212, 191, 0.26), transparent 70%);
-    filter: blur(26px) saturate(140%);
-    will-change: transform;
-    animation: liquidAuroraDrift 48s ease-in-out infinite alternate;
+      radial-gradient(38% 32% at 18% 12%, rgba(96, 165, 250, 0.34), transparent 70%),
+      radial-gradient(36% 30% at 86% 20%, rgba(129, 140, 248, 0.30), transparent 68%),
+      radial-gradient(42% 36% at 62% 88%, rgba(244, 114, 182, 0.24), transparent 72%),
+      radial-gradient(40% 34% at 8% 78%, rgba(45, 212, 191, 0.22), transparent 70%);
+    /* 静态层：WKVebView 里对全屏模糊层做动画会持续重绘，滑动/切页都会被拖慢。 */
   }
 
   .dark [data-liquid-shell]::before {
     background:
-      radial-gradient(40% 34% at 16% 10%, rgba(37, 99, 235, 0.40), transparent 70%),
-      radial-gradient(38% 32% at 88% 18%, rgba(99, 102, 241, 0.36), transparent 68%),
-      radial-gradient(44% 38% at 66% 90%, rgba(190, 24, 93, 0.26), transparent 72%),
-      radial-gradient(42% 36% at 6% 80%, rgba(13, 148, 136, 0.28), transparent 70%);
-    filter: blur(30px) saturate(125%);
+      radial-gradient(40% 34% at 16% 10%, rgba(37, 99, 235, 0.34), transparent 70%),
+      radial-gradient(38% 32% at 88% 18%, rgba(99, 102, 241, 0.30), transparent 68%),
+      radial-gradient(44% 38% at 66% 90%, rgba(190, 24, 93, 0.22), transparent 72%),
+      radial-gradient(42% 36% at 6% 80%, rgba(13, 148, 136, 0.24), transparent 70%);
   }
 
-  /* ---------- 内容面：轻微透明，让极光透出 --------------------------------- */
+  /* ---------- 内容面：轻微透明，让极光透出 ---------------------------------
+     不再对整屏内容做 backdrop-filter：那是滚动掉帧的最大来源。
+     用一个近乎不透明的底色代替，视觉上仍是磨砂玻璃。 */
   [data-liquid-surface] {
-    background-color: rgba(249, 250, 251, 0.86) !important;
-    backdrop-filter: blur(20px) saturate(160%);
-    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    background-color: rgba(249, 250, 251, 0.94) !important;
   }
 
   .dark [data-liquid-surface] {
@@ -86,9 +81,9 @@
     position: sticky;
     top: 0;
     z-index: 45;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.52)) !important;
-    backdrop-filter: blur(24px) saturate(185%);
-    -webkit-backdrop-filter: blur(24px) saturate(185%);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.80), rgba(255, 255, 255, 0.58)) !important;
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
     border-bottom: 1px solid var(--liquid-glass-edge) !important;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75), 0 6px 20px rgba(15, 23, 42, 0.06);
   }
@@ -113,9 +108,19 @@
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 4px 14px rgba(0, 0, 0, 0.28);
   }
 
+  /* ---------- 滚动容器底部避让 --------------------------------------------
+     底栏是悬浮层，不占布局；这里给滚动内容补底部留白，
+     保证最后一条笔记/任务能被滚到悬浮栏上方，同时内容仍能铺满整屏。 */
+  [data-mobile-tabbar="on"] [data-radix-scroll-area-viewport],
+  [data-mobile-tabbar="on"] [data-note-list-scroll-viewport="virtual"] {
+    padding-bottom: calc(var(--mobile-tabbar-space) + 10px);
+    scroll-padding-bottom: calc(var(--mobile-tabbar-space) + 10px);
+  }
+
   /* ---------- 右下角悬浮「+」------------------------------------------------ */
   [data-mobile-fab] {
     bottom: calc(var(--mobile-tabbar-space) + 14px) !important;
+    z-index: 46 !important;
     width: 58px !important;
     height: 58px !important;
     border-radius: 22px !important;
@@ -157,15 +162,37 @@
   -webkit-tap-highlight-color: transparent;
   -webkit-user-select: none;
   user-select: none;
+  contain: layout style;
+  transform: translateZ(0);
+}
+
+/* 悬浮底栏下方的渐隐衬底：遮住从缝隙里滑过的内容，同时不额外占用布局高度。 */
+.mobile-tabbar-scrim {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: calc(var(--mobile-tabbar-space) + 18px);
+  z-index: 45;
+  pointer-events: none;
+  background: linear-gradient(180deg, rgba(244, 247, 252, 0) 0%, rgba(244, 247, 252, 0.86) 52%, rgba(244, 247, 252, 0.98) 100%);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 46%);
+  mask-image: linear-gradient(180deg, transparent 0%, #000 46%);
+}
+
+.dark .mobile-tabbar-scrim {
+  background: linear-gradient(180deg, rgba(10, 12, 16, 0) 0%, rgba(10, 12, 16, 0.88) 52%, rgba(10, 12, 16, 0.98) 100%);
 }
 
 .mobile-tabbar__glass {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: linear-gradient(180deg, rgba(var(--liquid-glass-tint), 0.74), rgba(var(--liquid-glass-tint), 0.46));
-  backdrop-filter: blur(28px) saturate(190%);
-  -webkit-backdrop-filter: blur(28px) saturate(190%);
+  background: linear-gradient(180deg, rgba(var(--liquid-glass-tint), 0.80), rgba(var(--liquid-glass-tint), 0.56));
+  backdrop-filter: blur(18px) saturate(185%);
+  -webkit-backdrop-filter: blur(18px) saturate(185%);
   border: 1px solid var(--liquid-glass-edge);
   box-shadow:
     0 16px 40px rgba(15, 23, 42, 0.18),
@@ -230,22 +257,39 @@
   color: var(--liquid-accent);
 }
 
-.mobile-tabbar__pill {
+.mobile-tabbar__indicator {
   position: absolute;
   top: 7px;
   bottom: 7px;
-  left: 6px;
-  right: 6px;
+  left: 0;
+  width: calc(100% / var(--mobile-tabbar-count, 5));
   border-radius: 20px;
-  background: linear-gradient(180deg, rgba(var(--liquid-accent-rgb), 0.20), rgba(var(--liquid-accent-rgb), 0.09));
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(180deg, rgba(var(--liquid-accent-rgb), 0.22), rgba(var(--liquid-accent-rgb), 0.10));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.65),
     inset 0 0 0 1px rgba(var(--liquid-accent-rgb), 0.16),
     0 6px 16px rgba(var(--liquid-accent-rgb), 0.18);
-  pointer-events: none;
+  transform: translate3d(0, 0, 0);
+  /* 纯 transform 过渡：合成层内完成，不触发布局/重绘。 */
+  transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.2s ease;
+  will-change: transform;
 }
 
-.dark .mobile-tabbar__pill {
+.mobile-tabbar__indicator[data-visible="true"] {
+  opacity: 1;
+}
+
+.mobile-tabbar__indicator::after {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border-radius: 15px;
+  background: linear-gradient(180deg, rgba(var(--liquid-accent-rgb), 0.16), rgba(var(--liquid-accent-rgb), 0.06));
+}
+
+.dark .mobile-tabbar__indicator {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.16),
     inset 0 0 0 1px rgba(var(--liquid-accent-rgb), 0.28),

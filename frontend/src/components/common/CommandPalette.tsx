@@ -285,7 +285,12 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
           if (event.target === event.currentTarget) onClose();
         }}
       >
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm" aria-hidden />
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm"
+          aria-hidden
+          onClick={onClose}
+          onTouchEnd={(event) => { event.preventDefault(); onClose(); }}
+        />
         <div
           className="relative w-full max-w-[640px] overflow-hidden rounded-xl border border-app-border bg-app-elevated shadow-2xl"
           role="dialog"
@@ -310,6 +315,14 @@ export default function CommandPalette({ open, onClose }: CommandPaletteProps) {
             <kbd className="hidden h-5 items-center rounded border border-app-border px-1.5 text-[10px] text-tx-tertiary sm:inline-flex">
               Esc
             </kbd>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="关闭搜索"
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-app-hover text-tx-secondary active:scale-95 md:hidden"
+            >
+              <X size={16} />
+            </button>
           </div>
 
           <div ref={listRef} className="max-h-[56vh] overflow-y-auto py-1">

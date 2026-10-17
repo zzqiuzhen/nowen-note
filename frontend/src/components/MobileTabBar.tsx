@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Bell,
@@ -79,6 +79,8 @@ export default function MobileTabBar({ notificationCount = 0 }: { notificationCo
   const localDeviceMode = isMobileLocalMode();
   const [tabs, setTabs] = useState<MobileTabActionId[]>(() => loadMobileTabs());
   const [customizingSlot, setCustomizingSlot] = useState<number | null>(null);
+  // 乐观高亮：点下去立刻着色/移动指示器，页面渲染交给 React 的低优先级更新。
+  const [pendingAction, setPendingAction] = useState<MobileTabActionId | null>(null);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressFired = useRef(false);
   const pressStart = useRef<{ x: number; y: number } | null>(null);
@@ -166,8 +168,19 @@ export default function MobileTabBar({ notificationCount = 0 }: { notificationCo
       longPressFired.current = false;
       return;
     }
-    activate(action);
+    // 先上色（同步、几乎零成本），再让页面切换走 transition 低优先级渲染，
+    // 避免重页面挂载把这一帧的点击反馈一起卡住。
+    setPendingAction(action);
+    startTransition(() => activate(action));
   }, [activate]);
+
+  // 目标视图已经生效、或 500ms 后仍没切过去（例如设置/通知这类不发状态的动作），
+  // 就把乐观态交还给真实状态。
+  useEffect(() => {
+    if (!pendingAction) return;
+    const timer = setTimeout(() => setPendingAction(null), 500);
+    return () => clearTimeout(timer);
+  }, [pendingAction, state.viewMode]);
 
   const assignSlot = useCallback((slot: number, action: MobileTabActionId) => {
     const next = [...tabs];
@@ -193,18 +206,31 @@ export default function MobileTabBar({ notificationCount = 0 }: { notificationCo
   }, [customizingSlot, tabs]);
 
   const slotsFilled = Math.min(tabs.length, MOBILE_TAB_COUNT);
+  const activeAction = pendingAction ?? tabs.find((action) => isMobileTabActive(action, state.viewMode));
+  const activeIndex = activeAction ? tabs.indexOf(activeAction) : -1;
 
   return (
     <>
+      <div className="mobile-tabbar-scrim md:hidden" aria-hidden="true" />
       <nav
         className="mobile-tabbar md:hidden"
         data-mobile-tabbar=""
         aria-label={t("mobileTabs.ariaLabel", { defaultValue: "主导航" })}
       >
         <div className="mobile-tabbar__glass" aria-hidden="true" />
-        <div className="mobile-tabbar__items">
+        <div
+          className="mobile-tabbar__items"
+          style={{ ["--mobile-tabbar-count" as string]: slotsFilled } as React.CSSProperties}
+        >
+          {/* 指示器用 transform 位移，不再用 framer 的 layout 动画（每次都要读布局）。 */}
+          <span
+            className="mobile-tabbar__indicator"
+            data-visible={activeIndex >= 0 ? "true" : "false"}
+            style={{ transform: `translate3d(${Math.max(0, activeIndex) * 100}%, 0, 0)` }}
+            aria-hidden="true"
+          />
           {tabs.slice(0, slotsFilled).map((action, index) => {
-            const active = isMobileTabActive(action, state.viewMode);
+            const active = activeAction === action;
             return (
               <button
                 key={`${action}-${index}`}
@@ -222,14 +248,6 @@ export default function MobileTabBar({ notificationCount = 0 }: { notificationCo
                 onContextMenu={(event) => { event.preventDefault(); setCustomizingSlot(index); }}
                 onClick={() => handleClick(action)}
               >
-                {active && (
-                  <motion.span
-                    layoutId="mobile-tabbar-active-pill"
-                    className="mobile-tabbar__pill"
-                    transition={{ type: "spring", stiffness: 460, damping: 34, mass: 0.7 }}
-                    aria-hidden="true"
-                  />
-                )}
                 <span className="mobile-tabbar__icon">
                   {TAB_ICONS[action]}
                   {action === "notifications" && notificationCount > 0 && (
