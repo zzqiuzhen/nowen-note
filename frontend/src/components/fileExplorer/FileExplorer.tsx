@@ -108,7 +108,7 @@ function FileExplorerContent({ scope }: { scope: string }) {
   useEffect(() => () => clearTimeout(refreshTimer.current), []);
   const queue = useFileUploadQueue(scope, uploaded, () => identity() === scope);
   const path = folderPath(folders, folderId);
-  const title = smartFolder?.name || path.at(-1)?.name || t(`fileExplorer.${category}`);
+  const title = smartFolder?.name || (path.length > 0 ? path[path.length - 1].name : undefined) || t(`fileExplorer.${category}`);
   const currentFilters = useMemo(() => explorerAssetFilters(category, folderId, query, assetFilters), [category, folderId, query, assetFilters]);
   const pageSize = 60;
   const closeDetail = useCallback(() => setDetail(null), []);
@@ -142,24 +142,33 @@ function FileExplorerContent({ scope }: { scope: string }) {
     let stale = false;
     setLoading(true); setError("");
     const params: Parameters<typeof api.files.list>[0] = { ...currentFilters, page, pageSize, sort };
+    // scope 变化由外层 key={scope} 重挂载承担；这里只用 stale 判断，
+    // 避免 identity() 在启动期被异步解析后把结果全部丢掉（表现为一直空白）。
+    const watchdog = setTimeout(() => {
+      if (!stale) { setLoading(false); setError((previous) => previous || t("fileExplorer.loadTimeout")); }
+    }, 15_000);
     api.files.list(params).then((result) => {
-      if (stale || identity() !== scope) return;
+      if (stale) return;
+      setError("");
       setItems(result.items); setTotal(result.total);
       setSelected((previous) => new Set([...previous].filter((id) => result.items.some((item) => item.id === id))));
       if (page > 1 && result.total <= (page - 1) * pageSize) setPage(Math.max(1, Math.ceil(result.total / pageSize)));
     }).catch((failure: unknown) => {
-      if (!stale && identity() === scope) { setError(failure instanceof Error ? failure.message : String(failure)); setItems([]); }
-    }).finally(() => { if (!stale && identity() === scope) setLoading(false); });
-    return () => { stale = true; };
+      if (!stale) { setError(failure instanceof Error ? failure.message : String(failure)); setItems([]); }
+    }).finally(() => {
+      clearTimeout(watchdog);
+      if (!stale) setLoading(false);
+    });
+    return () => { stale = true; clearTimeout(watchdog); };
   }, [currentFilters, page, sort, revision, scope]);
   useEffect(() => {
     let stale = false;
     api.attachmentFolders.list().then((result) => {
-      if (stale || identity() !== scope) return;
+      if (stale) return;
       setFolders(result.folders); setFolderSupport(result.supported !== false); setFolderError("");
       if (folderId && !result.folders.some(folder => folder.id === folderId)) setFolderId(null);
     }).catch((failure: unknown) => {
-      if (!stale && identity() === scope) { setFolders([]); setFolderSupport(false); setFolderError(failure instanceof Error ? failure.message : String(failure)); }
+      if (!stale) { setFolders([]); setFolderSupport(false); setFolderError(failure instanceof Error ? failure.message : String(failure)); }
     });
     return () => { stale = true; };
   }, [revision, scope, folderId]);
@@ -167,9 +176,9 @@ function FileExplorerContent({ scope }: { scope: string }) {
   useEffect(() => {
     let stale = false;
     api.files.organization.list().then((result) => {
-      if (!stale && identity() === scope) { setOrganization(result); setOrganizationError(""); }
+      if (!stale) { setOrganization(result); setOrganizationError(""); }
     }).catch((failure: unknown) => {
-      if (!stale && identity() === scope) setOrganizationError(failure instanceof Error ? failure.message : String(failure));
+      if (!stale) setOrganizationError(failure instanceof Error ? failure.message : String(failure));
     });
     return () => { stale = true; };
   }, [revision, scope]);

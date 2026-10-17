@@ -6,6 +6,7 @@ import AICollaborationCenter from "@/components/AICollaborationCenter";
 import { useTranslation } from "react-i18next";
 import Sidebar from "@/components/Sidebar";
 import MobileTabBar from "@/components/MobileTabBar";
+import PageErrorBoundary from "@/components/PageErrorBoundary";
 import WorkspaceIssues from "@/components/issues/WorkspaceIssues";
 import NotificationCenter from "@/components/issues/NotificationCenter";
 import CommentManagementCenter from "@/components/CommentManagementCenter";
@@ -932,7 +933,7 @@ function AppLayout() {
         <div className={TASK_VIEW_SHELL_CLASS}>
           {/* 移动端顶栏 */}
           <MobileTopBar />
-          <TaskCenter />
+          <PageErrorBoundary resetKey={state.viewMode} label="待办"><TaskCenter /></PageErrorBoundary>
         </div>
       ) : isMindMapView ? (
         <div className="flex-1 flex flex-col">
@@ -971,7 +972,7 @@ function AppLayout() {
       ) : isFilesView ? (
         <div className="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
           <MobileTopBar />
-          <FileManager />
+          <PageErrorBoundary resetKey={state.viewMode} label="文件管理"><FileManager /></PageErrorBoundary>
         </div>
       ) : isSharesView ? (
         <div className="flex-1 flex min-w-0 flex-col">
@@ -980,7 +981,7 @@ function AppLayout() {
         </div>
       ) : (
         <div
-          className="flex-1 flex relative overflow-hidden"
+          className="flex-1 flex relative overflow-hidden bg-app-surface"
           data-note-workspace-window={adaptiveWindow.windowClass}
           data-note-workspace-two-pane={mediumNoteWorkspace ? "true" : "false"}
           data-note-workspace-width={adaptiveWindow.width}

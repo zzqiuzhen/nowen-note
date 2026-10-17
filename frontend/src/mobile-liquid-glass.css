@@ -3,11 +3,10 @@
  * -----------------------------------------------------------------------------
  * 只作用于 < md 断点（手机 / iPhone 内嵌 WKWebView），桌面端完全不受影响。
  * 结构：
- *   .mobile-tabbar                底部胶囊导航（5 个槽位，长按可替换）
+ *   .mobile-tabbar                悬浮胶囊导航（5 个槽位，长按可替换）
  *   .mobile-tabbar-sheet          长按后弹出的玻璃配置面板
- *   [data-mobile-glass-header]    顶部栏玻璃化
- *   [data-liquid-surface]         内容面轻微透明，让极光背景透出来
- *   [data-liquid-shell]::before   慢速流动的极光底层
+ *   [data-mobile-glass-header]    顶部栏（纯色，不使用毛玻璃）
+ *   [data-liquid-surface]         内容面底色
  * ========================================================================== */
 
 :root {
@@ -26,95 +25,70 @@
 }
 
 @media (max-width: 767px) {
-  /* ---------- 极光底层 ------------------------------------------------------ */
+  /* ---------- 中性底色 ------------------------------------------------------
+     早前的极光渐变层已经移除：它会在每个页面顶部透出蓝/紫色块，既破坏统一感，
+     也让 WKWebView 每次都多合成一层全屏模糊。现在整个外壳只有一个稳定的浅灰。 */
   [data-liquid-shell] {
     position: relative;
-    isolation: isolate;
-    /* 基础渐变兜底：即使 ::before 的极光层被系统关闭，也不会露出纯白/纯黑。 */
-    background:
-      linear-gradient(180deg, rgba(244, 247, 252, 0.96), rgba(238, 242, 249, 0.96)) !important;
+    background: #f4f6fa !important;
+    /* 切页时不要做颜色过渡：过渡期间会先露出底色，表现为“闪一下”。 */
+    transition: none !important;
   }
 
   .dark [data-liquid-shell] {
-    background:
-      linear-gradient(180deg, rgba(13, 15, 20, 0.98), rgba(10, 12, 16, 0.98)) !important;
+    background: #0d0f14 !important;
   }
 
-  /* 底栏是悬浮层：外壳不再预留任何空间（旧版 padding-bottom 会白占一条），
-     内容一直铺到屏幕底部，滚到底部的避让由各滚动容器自己的 padding-bottom 负责。 */
-
-  [data-liquid-shell]::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: -1;
-    pointer-events: none;
-    background:
-      radial-gradient(38% 32% at 18% 12%, rgba(96, 165, 250, 0.34), transparent 70%),
-      radial-gradient(36% 30% at 86% 20%, rgba(129, 140, 248, 0.30), transparent 68%),
-      radial-gradient(42% 36% at 62% 88%, rgba(244, 114, 182, 0.24), transparent 72%),
-      radial-gradient(40% 34% at 8% 78%, rgba(45, 212, 191, 0.22), transparent 70%);
-    /* 静态层：WKVebView 里对全屏模糊层做动画会持续重绘，滑动/切页都会被拖慢。 */
-  }
-
-  .dark [data-liquid-shell]::before {
-    background:
-      radial-gradient(40% 34% at 16% 10%, rgba(37, 99, 235, 0.34), transparent 70%),
-      radial-gradient(38% 32% at 88% 18%, rgba(99, 102, 241, 0.30), transparent 68%),
-      radial-gradient(44% 38% at 66% 90%, rgba(190, 24, 93, 0.22), transparent 72%),
-      radial-gradient(42% 36% at 6% 80%, rgba(13, 148, 136, 0.24), transparent 70%);
-  }
-
-  /* ---------- 内容面：轻微透明，让极光透出 ---------------------------------
-     不再对整屏内容做 backdrop-filter：那是滚动掉帧的最大来源。
-     用一个近乎不透明的底色代替，视觉上仍是磨砂玻璃。 */
+  /* ---------- 内容面 -------------------------------------------------------- */
   [data-liquid-surface] {
-    background-color: rgba(249, 250, 251, 0.94) !important;
+    background-color: #f9fafb !important;
   }
 
   .dark [data-liquid-surface] {
-    background-color: rgba(17, 20, 27, 0.86) !important;
+    background-color: #11141b !important;
   }
 
-  /* ---------- 顶部栏玻璃化 -------------------------------------------------- */
+  /* ---------- 顶部栏：纯色，不做毛玻璃 ------------------------------------
+     透明 + backdrop-filter 的顶栏在切页瞬间要重新采样底下内容，是闪动的来源；
+     纯色顶栏既稳又快，和页面底色统一。 */
   [data-mobile-glass-header] {
     position: sticky;
     top: 0;
     z-index: 45;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.80), rgba(255, 255, 255, 0.58)) !important;
-    backdrop-filter: blur(16px) saturate(180%);
-    -webkit-backdrop-filter: blur(16px) saturate(180%);
-    border-bottom: 1px solid var(--liquid-glass-edge) !important;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75), 0 6px 20px rgba(15, 23, 42, 0.06);
+    background: #f9fafb !important;
+    border-bottom: 1px solid var(--color-border-subtle, rgba(15, 23, 42, 0.08)) !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
 
   .dark [data-mobile-glass-header] {
-    background: linear-gradient(180deg, rgba(20, 23, 30, 0.82), rgba(20, 23, 30, 0.56)) !important;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10), 0 6px 20px rgba(0, 0, 0, 0.32);
+    background: #11141b !important;
+    border-bottom-color: rgba(255, 255, 255, 0.10) !important;
   }
 
-  /* 所有笔记页顶部的搜索入口：做成玻璃胶囊 */
+  /* 所有笔记页顶部的搜索入口：统一的浅底胶囊 */
   [data-note-list-search-entry] button {
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.46)) !important;
-    backdrop-filter: blur(18px) saturate(170%);
-    -webkit-backdrop-filter: blur(18px) saturate(170%);
-    border: 1px solid var(--liquid-glass-edge) !important;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 4px 14px rgba(15, 23, 42, 0.07);
+    background: #ffffff !important;
+    border: 1px solid rgba(15, 23, 42, 0.08) !important;
+    box-shadow: none !important;
     border-radius: 16px !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
   }
 
   .dark [data-note-list-search-entry] button {
-    background: linear-gradient(180deg, rgba(32, 36, 46, 0.72), rgba(32, 36, 46, 0.46)) !important;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 4px 14px rgba(0, 0, 0, 0.28);
+    background: #191d25 !important;
+    border-color: rgba(255, 255, 255, 0.10) !important;
   }
 
   /* ---------- 滚动容器底部避让 --------------------------------------------
-     底栏是悬浮层，不占布局；这里给滚动内容补底部留白，
-     保证最后一条笔记/任务能被滚到悬浮栏上方，同时内容仍能铺满整屏。 */
+     底栏悬浮在内容之上，不占布局；这里只补一段底部留白，
+     保证最后一条能被滚到悬浮栏上方，其余内容依然铺到屏幕最底。 */
   [data-mobile-tabbar="on"] [data-radix-scroll-area-viewport],
   [data-mobile-tabbar="on"] [data-note-list-scroll-viewport="virtual"] {
-    padding-bottom: calc(var(--mobile-tabbar-space) + 10px);
-    scroll-padding-bottom: calc(var(--mobile-tabbar-space) + 10px);
+    padding-bottom: calc(var(--mobile-tabbar-height) + 28px);
+    scroll-padding-bottom: calc(var(--mobile-tabbar-height) + 28px);
   }
 
   /* ---------- 右下角悬浮「+」------------------------------------------------ */
@@ -141,14 +115,10 @@
   }
 }
 
-@keyframes liquidAuroraDrift {
-  0% { transform: translate3d(-2%, -1%, 0) scale(1); }
-  50% { transform: translate3d(2%, 2%, 0) scale(1.06); }
-  100% { transform: translate3d(-1%, 3%, 0) scale(1.02); }
-}
-
 /* =============================================================================
- * 底部标签栏
+ * 底部标签栏 —— 真正的悬浮层
+ * 只有胶囊本身有底色，左右/下方留出的空隙直接透出页面内容；
+ * 没有整条遮罩，所以滚动内容会在胶囊下方正常可见。
  * ========================================================================== */
 .mobile-tabbar {
   position: fixed;
@@ -166,33 +136,13 @@
   transform: translateZ(0);
 }
 
-/* 悬浮底栏下方的渐隐衬底：遮住从缝隙里滑过的内容，同时不额外占用布局高度。 */
-.mobile-tabbar-scrim {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: calc(var(--mobile-tabbar-space) + 18px);
-  z-index: 45;
-  pointer-events: none;
-  background: linear-gradient(180deg, rgba(244, 247, 252, 0) 0%, rgba(244, 247, 252, 0.86) 52%, rgba(244, 247, 252, 0.98) 100%);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  -webkit-mask-image: linear-gradient(180deg, transparent 0%, #000 46%);
-  mask-image: linear-gradient(180deg, transparent 0%, #000 46%);
-}
-
-.dark .mobile-tabbar-scrim {
-  background: linear-gradient(180deg, rgba(10, 12, 16, 0) 0%, rgba(10, 12, 16, 0.88) 52%, rgba(10, 12, 16, 0.98) 100%);
-}
-
 .mobile-tabbar__glass {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: linear-gradient(180deg, rgba(var(--liquid-glass-tint), 0.80), rgba(var(--liquid-glass-tint), 0.56));
-  backdrop-filter: blur(18px) saturate(185%);
-  -webkit-backdrop-filter: blur(18px) saturate(185%);
+  background: linear-gradient(180deg, rgba(var(--liquid-glass-tint), 0.90), rgba(var(--liquid-glass-tint), 0.76));
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
   border: 1px solid var(--liquid-glass-edge);
   box-shadow:
     0 16px 40px rgba(15, 23, 42, 0.18),
@@ -595,9 +545,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  [data-liquid-shell]::before {
-    animation: none;
-  }
   .mobile-tabbar__item,
   .mobile-tabbar-sheet__option,
   [data-mobile-fab] {

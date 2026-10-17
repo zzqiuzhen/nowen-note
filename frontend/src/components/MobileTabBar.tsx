@@ -211,7 +211,6 @@ export default function MobileTabBar({ notificationCount = 0 }: { notificationCo
 
   return (
     <>
-      <div className="mobile-tabbar-scrim md:hidden" aria-hidden="true" />
       <nav
         className="mobile-tabbar md:hidden"
         data-mobile-tabbar=""

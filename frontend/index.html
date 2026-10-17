@@ -144,6 +144,25 @@
             if (this == null) throw new TypeError("Array.prototype.toReversed called on null or undefined");
             return Array.prototype.slice.call(this).reverse();
           });
+          // iOS 15.0–15.3 没有 Array.prototype.at / String.prototype.at，
+          // 文件管理、任务等多个页面直接用它取末元素，缺了会整块白屏。
+          defineBootMethod(Array.prototype, "at", function (index) {
+            if (this == null) throw new TypeError("Array.prototype.at called on null or undefined");
+            var target = Object(this);
+            var length = bootLength(target.length);
+            var relative = Number(index) || 0;
+            var position = relative < 0 ? length + relative : relative;
+            if (position < 0 || position >= length) return undefined;
+            return target[position];
+          });
+          defineBootMethod(String.prototype, "at", function (index) {
+            if (this == null) throw new TypeError("String.prototype.at called on null or undefined");
+            var source = String(this);
+            var relative = Number(index) || 0;
+            var position = relative < 0 ? source.length + relative : relative;
+            if (position < 0 || position >= source.length) return undefined;
+            return source.charAt(position);
+          });
         }
 
         if (typeof Promise !== "undefined" && typeof Promise.prototype.finally !== "function") {
