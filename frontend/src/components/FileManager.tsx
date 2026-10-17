@@ -2320,7 +2320,11 @@ function ListView({
   );
 }
 
-const FileExplorer = React.lazy(() => import("./fileExplorer/FileExplorer"));
+import FileExplorer from "./fileExplorer/FileExplorer";
+
+// 直接用静态导入：iOS WKWebView 上动态 import 的 chunk 若加载失败，
+// Suspense 会一直停在 fallback（用户在真机上看到的就是「文件管理什么也不显示」）。
+// FileExplorer 是这个页面的唯一内容，静态化只是把它并入主包，代价可接受。
 export default function FileManager() {
-  return <React.Suspense fallback={<div className="p-6 text-tx-secondary"><Loader2 className="animate-spin" /></div>}><FileExplorer /></React.Suspense>;
+  return <FileExplorer />;
 }

@@ -58,9 +58,10 @@ const config: CapacitorConfig = {
       showSpinner: false,
     },
     StatusBar: {
-      // 冷启动初始值（浅色）；启动后由 useStatusBarSync 根据主题动态切换
-      style: "LIGHT",
-      backgroundColor: "#F5F3EE",
+      // 冷启动初始值（浅色背景 → 深色文字）；启动后由 useStatusBarSync 根据主题动态切换。
+      // 注意 Capacitor 的枚举是「文字颜色」：DARK = 深色文字（浅背景用）。
+      style: "DARK",
+      backgroundColor: "#FFFFFF",
     },
     Keyboard: {
       // 键盘弹出时不自动调整 WebView 大小，由前端 JS 手动控制布局。

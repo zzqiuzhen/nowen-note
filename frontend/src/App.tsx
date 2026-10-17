@@ -852,6 +852,11 @@ function AppLayout() {
   // 底部标签栏：进入笔记编辑（移动端全屏编辑器）时隐藏，其余视图常驻。
   const mobileTabBarVisible = state.mobileView !== "editor";
 
+  // 笔记工作区是否当前可见：其他模块渲染时只隐藏不卸载，避免返回「全部笔记」时重新挂载造成闪屏。
+  const isNotesWorkspaceView =
+    state.viewMode !== "trash" && !isSheetView && !isIssuesView && !isTaskView &&
+    !isMindMapView && !isAIChatView && !isDiaryView && !isFilesView && !isSharesView;
+
   return (
     <div
       className="flex h-[100dvh] w-screen bg-app-bg overflow-hidden transition-colors duration-200"
@@ -911,78 +916,11 @@ function AppLayout() {
       {showSidebar && !mediumNoteWorkspace && isDesktopViewport && !isFilesView && <SidebarResizeHandle />}
 
       {/* ===== 主内容区 ===== */}
-      {state.viewMode === "trash" ? (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <MobileTopBar />
-          <TrashPage />
-        </div>
-      ) : isSheetView ? (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <MobileTopBar />
-          <SheetEditor
-            noteId={sheetRoute.sheetId!}
-            onRequestClose={() => replaceAppPathState("/")}
-          />
-        </div>
-      ) : isIssuesView ? (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <MobileTopBar />
-          <WorkspaceIssues key={issueRoute.issueId ?? "issues-list"} issueId={issueRoute.issueId} />
-        </div>
-      ) : isTaskView ? (
-        <div className={TASK_VIEW_SHELL_CLASS}>
-          {/* 移动端顶栏 */}
-          <MobileTopBar />
-          <PageErrorBoundary resetKey={state.viewMode} label="待办"><TaskCenter /></PageErrorBoundary>
-        </div>
-      ) : isMindMapView ? (
-        <div className="flex-1 flex flex-col">
-          <MobileTopBar />
-          <MindMapCenter
-            documentMode={mindMapRoute.matched && mindMapRoute.mindMapId !== null}
-            routeMindMapId={mindMapRoute.matched ? mindMapRoute.mindMapId : undefined}
-            onRequestClose={() => actions.setViewMode("all")}
-          />
-        </div>
-      ) : isAIChatView ? (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <MobileTopBar />
-          <AIChatPanel
-            onClose={() => actions.setViewMode("all")}
-            onNavigateToNote={async (noteId) => {
-              try {
-                const { api } = await import("@/lib/api");
-                const note = await api.getNote(noteId);
-                if (note) {
-                  actions.setActiveNote(note);
-                  actions.setViewMode("all");
-                  actions.setMobileView("editor");
-                }
-              } catch (err) {
-                console.error("Navigate to note failed:", err);
-              }
-            }}
-          />
-        </div>
-      ) : isDiaryView ? (
-        <div className="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
-          <MobileTopBar />
-          <DiaryCenter />
-        </div>
-      ) : isFilesView ? (
-        <div className="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
-          <MobileTopBar />
-          <PageErrorBoundary resetKey={state.viewMode} label="文件管理"><FileManager /></PageErrorBoundary>
-        </div>
-      ) : isSharesView ? (
-        <div className="flex-1 flex min-w-0 flex-col">
-          <MobileTopBar />
-          <ShareManagementPage />
-        </div>
-      ) : (
-        <div
-          className="flex-1 flex relative overflow-hidden bg-app-surface"
-          data-note-workspace-window={adaptiveWindow.windowClass}
+      {/* 笔记工作区常驻挂载：切模块时只 display:none，不卸载组件树，
+          这样从「待办 / 文件管理」等返回「全部笔记」时不会重新拉数据、不会闪。 */}
+      <div
+        className={`flex-1 flex relative overflow-hidden bg-app-surface${isNotesWorkspaceView ? "" : " hidden"}`}
+        data-note-workspace-window={adaptiveWindow.windowClass}
           data-note-workspace-two-pane={mediumNoteWorkspace ? "true" : "false"}
           data-note-workspace-width={adaptiveWindow.width}
           data-note-workspace-height={adaptiveWindow.height}
@@ -1026,8 +964,85 @@ function AppLayout() {
             </PhaseAPerfProfiler>
           </div>
         </div>
-      )}
 
+      {/* ===== 其他模块视图（与笔记工作区互斥，笔记区保留挂载） ===== */}
+      {state.viewMode === "trash" && (
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <MobileTopBar />
+          <TrashPage />
+        </div>
+      )}
+      {isSheetView && (
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <MobileTopBar />
+          <SheetEditor
+            noteId={sheetRoute.sheetId!}
+            onRequestClose={() => replaceAppPathState("/")}
+          />
+        </div>
+      )}
+      {isIssuesView && (
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <MobileTopBar />
+          <WorkspaceIssues key={issueRoute.issueId ?? "issues-list"} issueId={issueRoute.issueId} />
+        </div>
+      )}
+      {isTaskView && (
+        <div className={TASK_VIEW_SHELL_CLASS}>
+          {/* 移动端顶栏 */}
+          <MobileTopBar />
+          <PageErrorBoundary resetKey={state.viewMode} label="待办"><TaskCenter /></PageErrorBoundary>
+        </div>
+      )}
+      {isMindMapView && (
+        <div className="flex-1 flex flex-col">
+          <MobileTopBar />
+          <MindMapCenter
+            documentMode={mindMapRoute.matched && mindMapRoute.mindMapId !== null}
+            routeMindMapId={mindMapRoute.matched ? mindMapRoute.mindMapId : undefined}
+            onRequestClose={() => actions.setViewMode("all")}
+          />
+        </div>
+      )}
+      {isAIChatView && (
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <MobileTopBar />
+          <AIChatPanel
+            onClose={() => actions.setViewMode("all")}
+            onNavigateToNote={async (noteId) => {
+              try {
+                const { api } = await import("@/lib/api");
+                const note = await api.getNote(noteId);
+                if (note) {
+                  actions.setActiveNote(note);
+                  actions.setViewMode("all");
+                  actions.setMobileView("editor");
+                }
+              } catch (err) {
+                console.error("Navigate to note failed:", err);
+              }
+            }}
+          />
+        </div>
+      )}
+      {isDiaryView && (
+        <div className="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
+          <MobileTopBar />
+          <DiaryCenter />
+        </div>
+      )}
+      {isFilesView && (
+        <div className="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden">
+          <MobileTopBar />
+          <PageErrorBoundary resetKey={state.viewMode} label="文件管理"><FileManager /></PageErrorBoundary>
+        </div>
+      )}
+      {isSharesView && (
+        <div className="flex-1 flex min-w-0 flex-col">
+          <MobileTopBar />
+          <ShareManagementPage />
+        </div>
+      )}
       <CommentManagementCenter onOpenComment={handleOpenComment} />
       <NotificationCenter onUnreadChange={setNotificationCount} onOpenComment={handleOpenComment} onOpenIssue={(issueId, workspaceId) => { openWorkspaceIssue(issueId, workspaceId); actions.setViewMode("issues"); actions.setMobileSidebar(false); }} />
 

@@ -26,36 +26,36 @@
 
 @media (max-width: 767px) {
   /* ---------- 中性底色 ------------------------------------------------------
-     早前的极光渐变层已经移除：它会在每个页面顶部透出蓝/紫色块，既破坏统一感，
-     也让 WKWebView 每次都多合成一层全屏模糊。现在整个外壳只有一个稳定的浅灰。 */
+     外壳 / 内容面 / 顶栏共用一个底色：状态栏区域由顶栏的 safe-area padding 填满，
+     三者同色后顶部就没有一条突兀的色带，视觉上等同于沉浸式状态栏。
+     不用任何渐变：渐变会在切页的第一帧露出来，表现为“闪一下”。 */
   [data-liquid-shell] {
     position: relative;
-    background: #f4f6fa !important;
-    /* 切页时不要做颜色过渡：过渡期间会先露出底色，表现为“闪一下”。 */
+    background: #ffffff !important;
     transition: none !important;
   }
 
   .dark [data-liquid-shell] {
-    background: #0d0f14 !important;
+    background: #0d1117 !important;
   }
 
   /* ---------- 内容面 -------------------------------------------------------- */
   [data-liquid-surface] {
-    background-color: #f9fafb !important;
+    background-color: #ffffff !important;
   }
 
   .dark [data-liquid-surface] {
-    background-color: #11141b !important;
+    background-color: #0d1117 !important;
   }
 
-  /* ---------- 顶部栏：纯色，不做毛玻璃 ------------------------------------
-     透明 + backdrop-filter 的顶栏在切页瞬间要重新采样底下内容，是闪动的来源；
-     纯色顶栏既稳又快，和页面底色统一。 */
+  /* ---------- 顶部栏：与页面同色，向状态栏延伸 ----------------------------
+     顶栏自身的 padding-top 已经吃下 env(safe-area-inset-top)，
+     所以只要背景同色，状态栏区域和顶栏就是连续的一整块，不再出现灰带。 */
   [data-mobile-glass-header] {
     position: sticky;
     top: 0;
     z-index: 45;
-    background: #f9fafb !important;
+    background: #ffffff !important;
     border-bottom: 1px solid var(--color-border-subtle, rgba(15, 23, 42, 0.08)) !important;
     box-shadow: none !important;
     backdrop-filter: none !important;
@@ -63,9 +63,10 @@
   }
 
   .dark [data-mobile-glass-header] {
-    background: #11141b !important;
-    border-bottom-color: rgba(255, 255, 255, 0.10) !important;
+    background: #0d1117 !important;
+    border-bottom-color: rgba(255, 255, 255, 0.08) !important;
   }
+
 
   /* 所有笔记页顶部的搜索入口：统一的浅底胶囊 */
   [data-note-list-search-entry] button {
