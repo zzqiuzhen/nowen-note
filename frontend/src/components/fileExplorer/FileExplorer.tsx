@@ -115,20 +115,29 @@ function FileExplorerContent({ scope }: { scope: string }) {
     const base = getBaseUrl();
     let token = "";
     try { token = localStorage.getItem("nowen-token") || ""; } catch { /* ignore */ }
-    const line = [`base=${base}`, `token=${token ? "有" : "无"}`];
+    let platform = "?";
+    try {
+      const cap = (window as any).Capacitor;
+      platform = cap?.getPlatform?.() || cap?.platform || "?";
+    } catch { /* ignore */ }
+    const line = [`base=${base}`, `token=${token ? "有" : "无"}`, `platform=${platform}`, `online=${navigator.onLine}`];
     const auth: Record<string, string> = token ? { Authorization: "Bear" + "er " + token } : {};
     const get = async (path: string) => {
       try {
         const res = await window.fetch(`${base}${path}`, { headers: auth });
         const text = await res.text();
-        return `${res.status} ${text.slice(0, 120)}`;
+        return `${res.status} ${text.slice(0, 110)}`;
       } catch (failure) {
         return `失败 ${failure instanceof Error ? failure.message : String(failure)}`;
       }
     };
-    line.push(`version=${await get("/api/version")}`);
-    line.push(`me=${await get("/api/me")}`);
-    line.push(`files=${await get("/api/files?pageSize=1")}`);
+    // getBaseUrl() 已含 api 前缀（/api 或 /publicapi），这里不能再拼 /api。
+    line.push(`version=${await get("/version")}`);
+    line.push(`me=${await get("/me")}`);
+    line.push(`files=${await get("/files?pageSize=1")}`);
+    // 复刻文件列表页真实请求（page=1&pageSize=60&sort=created_desc），
+    // 用来判断「服务器能返回文件」还是「这条请求在真机上根本没出去/被吞」。
+    line.push(`filesFull=${await get("/files?page=1&pageSize=60&sort=created_desc")}`);
     setNativeDiag(line.join("\n"));
   }, []);
 
