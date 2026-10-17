@@ -3461,9 +3461,9 @@ export default function NoteList({ directorySearchActive = false }: { directoryS
   };
 
   return (
-    <div className="w-full min-w-0 h-full bg-app-surface border-r border-app-border flex flex-col transition-colors relative">
+    <div data-liquid-surface="" className="w-full min-w-0 h-full bg-app-surface border-r border-app-border flex flex-col transition-colors relative">
       {/* Mobile Header */}
-      <header className="flex items-center justify-between gap-2 px-4 py-3 border-b border-app-border md:hidden relative z-40" style={{ paddingTop: 'calc(var(--safe-area-top) + 4px)' }}>
+      <header data-mobile-glass-header="" className="flex items-center justify-between gap-2 px-4 py-3 border-b border-app-border md:hidden relative z-40" style={{ paddingTop: 'calc(var(--safe-area-top) + 4px)' }}>
         <button
           onClick={() => actions.setMobileSidebar(true)}
           className="shrink-0 p-2 -ml-2 rounded-lg text-tx-secondary hover:bg-app-hover active:bg-app-active"
@@ -4176,6 +4176,7 @@ export default function NoteList({ directorySearchActive = false }: { directoryS
 
         <button
           ref={createMenuAnchorFabRef}
+          data-mobile-fab=""
           onClick={() => handleCreateNote("normal")}
           onContextMenu={(e) => {
             e.preventDefault();

@@ -30,6 +30,7 @@ import SiyuanRichTextCalloutBridge from "./components/SiyuanRichTextCalloutBridg
 import InlineCommentBridge from "./components/InlineCommentBridge";
 import { isMobileLocalMode } from "./lib/mobileLocalMode";
 import "./index.css";
+import "./mobile-liquid-glass.css";
 import "./editor-list-markers.css";
 import "./code-block-wrap.css";
 import "./overlay-layers.css";

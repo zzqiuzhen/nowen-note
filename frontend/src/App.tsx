@@ -5,6 +5,7 @@ import { openAICollaboration } from "@/lib/aiCollaboration";
 import AICollaborationCenter from "@/components/AICollaborationCenter";
 import { useTranslation } from "react-i18next";
 import Sidebar from "@/components/Sidebar";
+import MobileTabBar from "@/components/MobileTabBar";
 import WorkspaceIssues from "@/components/issues/WorkspaceIssues";
 import NotificationCenter from "@/components/issues/NotificationCenter";
 import CommentManagementCenter from "@/components/CommentManagementCenter";
@@ -847,8 +848,15 @@ function AppLayout() {
     if (userPrefs.enableNoteTabs) actions.openNoteTab({ id: note.id, title: note.title, notebookId: note.notebookId, workspaceId: note.workspaceId, contentFormat: note.contentFormat, colorMark: note.colorMark, isLocked: note.isLocked, isTrashed: note.isTrashed, updatedAt: note.updatedAt });
   });
 
+  // 底部标签栏：进入笔记编辑（移动端全屏编辑器）时隐藏，其余视图常驻。
+  const mobileTabBarVisible = state.mobileView !== "editor";
+
   return (
-    <div className="flex h-[100dvh] w-screen bg-app-bg overflow-hidden transition-colors duration-200">
+    <div
+      className="flex h-[100dvh] w-screen bg-app-bg overflow-hidden transition-colors duration-200"
+      data-liquid-shell=""
+      data-mobile-tabbar={mobileTabBarVisible ? "on" : "off"}
+    >
       <NoteDeepLinkBridge />
       {/* 移动端目录使用全屏抽屉；快捷栏默认显示，也可通过独立偏好隐藏。 */}
       <AnimatePresence>
@@ -1045,6 +1053,9 @@ function AppLayout() {
 
       {/* 桌面端文件夹自动同步调度器（仅 Electron，无 UI） */}
       <FolderSyncScheduler />
+
+      {/* 移动端底部标签栏（微信式 5 槽位，长按可替换；桌面端不渲染） */}
+      {mobileTabBarVisible && <MobileTabBar notificationCount={notificationCount} />}
     </div>
   );
 }
@@ -1054,7 +1065,7 @@ function MobileTopBar() {
   const actions = useAppActions();
   const { siteConfig } = useSiteSettings();
   return (
-    <header className="flex items-center px-4 py-3 border-b border-app-border bg-app-surface/50 md:hidden" style={{ paddingTop: 'calc(var(--safe-area-top) + 4px)' }}>
+    <header data-mobile-glass-header="" className="flex items-center px-4 py-3 border-b border-app-border bg-app-surface/50 md:hidden" style={{ paddingTop: 'calc(var(--safe-area-top) + 4px)' }}>
       <button
         onClick={() => actions.setMobileSidebar(true)}
         className="p-2 -ml-2 rounded-lg text-tx-secondary hover:bg-app-hover active:bg-app-active"

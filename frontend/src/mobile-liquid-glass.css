@@ -1,0 +1,562 @@
+/* =============================================================================
+ * 移动端「液态玻璃」外观 + 微信式底部标签栏
+ * -----------------------------------------------------------------------------
+ * 只作用于 < md 断点（手机 / iPhone 内嵌 WKWebView），桌面端完全不受影响。
+ * 结构：
+ *   .mobile-tabbar                底部胶囊导航（5 个槽位，长按可替换）
+ *   .mobile-tabbar-sheet          长按后弹出的玻璃配置面板
+ *   [data-mobile-glass-header]    顶部栏玻璃化
+ *   [data-liquid-surface]         内容面轻微透明，让极光背景透出来
+ *   [data-liquid-shell]::before   慢速流动的极光底层
+ * ========================================================================== */
+
+:root {
+  --mobile-tabbar-height: 62px;
+  --mobile-tabbar-gap: 10px;
+  --mobile-tabbar-space: calc(var(--mobile-tabbar-height) + var(--mobile-tabbar-gap) * 2 + env(safe-area-inset-bottom, 0px));
+  --liquid-glass-tint: 255, 255, 255;
+  --liquid-glass-edge: rgba(255, 255, 255, 0.62);
+  --liquid-accent: var(--color-accent-primary, #3b82f6);
+  --liquid-accent-rgb: var(--color-accent-primary-rgb, 59, 130, 246);
+}
+
+.dark {
+  --liquid-glass-tint: 22, 25, 33;
+  --liquid-glass-edge: rgba(255, 255, 255, 0.14);
+}
+
+@media (max-width: 767px) {
+  /* ---------- 极光底层 ------------------------------------------------------ */
+  [data-liquid-shell] {
+    position: relative;
+    isolation: isolate;
+    /* 基础渐变兜底：即使 ::before 的极光层被系统关闭，也不会露出纯白/纯黑。 */
+    background:
+      linear-gradient(180deg, rgba(244, 247, 252, 0.96), rgba(238, 242, 249, 0.96)) !important;
+    transition: padding-bottom 0.2s ease;
+  }
+
+  .dark [data-liquid-shell] {
+    background:
+      linear-gradient(180deg, rgba(13, 15, 20, 0.98), rgba(10, 12, 16, 0.98)) !important;
+  }
+
+  [data-liquid-shell][data-mobile-tabbar="on"] {
+    padding-bottom: var(--mobile-tabbar-space);
+  }
+
+  [data-liquid-shell]::before {
+    content: "";
+    position: fixed;
+    inset: -25%;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(38% 32% at 18% 12%, rgba(96, 165, 250, 0.42), transparent 70%),
+      radial-gradient(36% 30% at 86% 20%, rgba(129, 140, 248, 0.38), transparent 68%),
+      radial-gradient(42% 36% at 62% 88%, rgba(244, 114, 182, 0.30), transparent 72%),
+      radial-gradient(40% 34% at 8% 78%, rgba(45, 212, 191, 0.26), transparent 70%);
+    filter: blur(26px) saturate(140%);
+    will-change: transform;
+    animation: liquidAuroraDrift 48s ease-in-out infinite alternate;
+  }
+
+  .dark [data-liquid-shell]::before {
+    background:
+      radial-gradient(40% 34% at 16% 10%, rgba(37, 99, 235, 0.40), transparent 70%),
+      radial-gradient(38% 32% at 88% 18%, rgba(99, 102, 241, 0.36), transparent 68%),
+      radial-gradient(44% 38% at 66% 90%, rgba(190, 24, 93, 0.26), transparent 72%),
+      radial-gradient(42% 36% at 6% 80%, rgba(13, 148, 136, 0.28), transparent 70%);
+    filter: blur(30px) saturate(125%);
+  }
+
+  /* ---------- 内容面：轻微透明，让极光透出 --------------------------------- */
+  [data-liquid-surface] {
+    background-color: rgba(249, 250, 251, 0.86) !important;
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+  }
+
+  .dark [data-liquid-surface] {
+    background-color: rgba(17, 20, 27, 0.86) !important;
+  }
+
+  /* ---------- 顶部栏玻璃化 -------------------------------------------------- */
+  [data-mobile-glass-header] {
+    position: sticky;
+    top: 0;
+    z-index: 45;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.52)) !important;
+    backdrop-filter: blur(24px) saturate(185%);
+    -webkit-backdrop-filter: blur(24px) saturate(185%);
+    border-bottom: 1px solid var(--liquid-glass-edge) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75), 0 6px 20px rgba(15, 23, 42, 0.06);
+  }
+
+  .dark [data-mobile-glass-header] {
+    background: linear-gradient(180deg, rgba(20, 23, 30, 0.82), rgba(20, 23, 30, 0.56)) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10), 0 6px 20px rgba(0, 0, 0, 0.32);
+  }
+
+  /* 所有笔记页顶部的搜索入口：做成玻璃胶囊 */
+  [data-note-list-search-entry] button {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.46)) !important;
+    backdrop-filter: blur(18px) saturate(170%);
+    -webkit-backdrop-filter: blur(18px) saturate(170%);
+    border: 1px solid var(--liquid-glass-edge) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 4px 14px rgba(15, 23, 42, 0.07);
+    border-radius: 16px !important;
+  }
+
+  .dark [data-note-list-search-entry] button {
+    background: linear-gradient(180deg, rgba(32, 36, 46, 0.72), rgba(32, 36, 46, 0.46)) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 4px 14px rgba(0, 0, 0, 0.28);
+  }
+
+  /* ---------- 右下角悬浮「+」------------------------------------------------ */
+  [data-mobile-fab] {
+    bottom: calc(var(--mobile-tabbar-space) + 14px) !important;
+    width: 58px !important;
+    height: 58px !important;
+    border-radius: 22px !important;
+    background: linear-gradient(180deg, rgba(var(--liquid-accent-rgb), 0.98), rgba(var(--liquid-accent-rgb), 0.82)) !important;
+    backdrop-filter: blur(14px) saturate(180%);
+    -webkit-backdrop-filter: blur(14px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    box-shadow:
+      0 14px 30px rgba(var(--liquid-accent-rgb), 0.38),
+      0 2px 8px rgba(15, 23, 42, 0.16),
+      inset 0 1px 0 rgba(255, 255, 255, 0.55);
+    transition: transform 0.16s ease, box-shadow 0.16s ease;
+  }
+
+  [data-mobile-fab]:active {
+    transform: scale(0.93);
+    box-shadow: 0 8px 18px rgba(var(--liquid-accent-rgb), 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  }
+}
+
+@keyframes liquidAuroraDrift {
+  0% { transform: translate3d(-2%, -1%, 0) scale(1); }
+  50% { transform: translate3d(2%, 2%, 0) scale(1.06); }
+  100% { transform: translate3d(-1%, 3%, 0) scale(1.02); }
+}
+
+/* =============================================================================
+ * 底部标签栏
+ * ========================================================================== */
+.mobile-tabbar {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + var(--mobile-tabbar-gap));
+  height: var(--mobile-tabbar-height);
+  z-index: 46;
+  padding: 0 6px;
+  border-radius: 26px;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.mobile-tabbar__glass {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(var(--liquid-glass-tint), 0.74), rgba(var(--liquid-glass-tint), 0.46));
+  backdrop-filter: blur(28px) saturate(190%);
+  -webkit-backdrop-filter: blur(28px) saturate(190%);
+  border: 1px solid var(--liquid-glass-edge);
+  box-shadow:
+    0 16px 40px rgba(15, 23, 42, 0.18),
+    0 2px 8px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.22);
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* 斜向高光：液态玻璃的「反光面」 */
+.mobile-tabbar__glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(112deg, rgba(255, 255, 255, 0.55) 0%, rgba(255, 255, 255, 0) 34%, rgba(255, 255, 255, 0) 66%, rgba(255, 255, 255, 0.26) 100%);
+  opacity: 0.9;
+}
+
+.dark .mobile-tabbar__glass {
+  box-shadow:
+    0 16px 40px rgba(0, 0, 0, 0.42),
+    0 2px 8px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.dark .mobile-tabbar__glass::after {
+  background: linear-gradient(112deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0) 36%, rgba(255, 255, 255, 0) 64%, rgba(255, 255, 255, 0.08) 100%);
+}
+
+.mobile-tabbar__items {
+  position: relative;
+  display: flex;
+  height: 100%;
+  align-items: stretch;
+}
+
+.mobile-tabbar__item {
+  position: relative;
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-tertiary, #9ca3af);
+  font: inherit;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: color 0.18s ease, transform 0.16s ease;
+}
+
+.mobile-tabbar__item:active {
+  transform: scale(0.93);
+}
+
+.mobile-tabbar__item.is-active {
+  color: var(--liquid-accent);
+}
+
+.mobile-tabbar__pill {
+  position: absolute;
+  top: 7px;
+  bottom: 7px;
+  left: 6px;
+  right: 6px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(var(--liquid-accent-rgb), 0.20), rgba(var(--liquid-accent-rgb), 0.09));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.65),
+    inset 0 0 0 1px rgba(var(--liquid-accent-rgb), 0.16),
+    0 6px 16px rgba(var(--liquid-accent-rgb), 0.18);
+  pointer-events: none;
+}
+
+.dark .mobile-tabbar__pill {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    inset 0 0 0 1px rgba(var(--liquid-accent-rgb), 0.28),
+    0 6px 18px rgba(var(--liquid-accent-rgb), 0.24);
+}
+
+.mobile-tabbar__icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.18s ease;
+}
+
+.mobile-tabbar__item.is-active .mobile-tabbar__icon {
+  transform: translateY(-1px);
+  filter: drop-shadow(0 2px 8px rgba(var(--liquid-accent-rgb), 0.45));
+}
+
+.mobile-tabbar__label {
+  font-size: 10px;
+  line-height: 1.1;
+  font-weight: 600;
+  letter-spacing: 0.015em;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-tabbar__badge {
+  position: absolute;
+  top: -5px;
+  right: -9px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 9px;
+  line-height: 15px;
+  font-weight: 700;
+  text-align: center;
+  box-shadow: 0 2px 6px rgba(239, 68, 68, 0.4);
+}
+
+/* =============================================================================
+ * 长按弹出的玻璃配置面板
+ * ========================================================================== */
+.mobile-tabbar-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.mobile-tabbar-sheet__backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: rgba(15, 23, 42, 0.34);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.mobile-tabbar-sheet__panel {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  max-height: 84dvh;
+  overflow-y: auto;
+  padding: 8px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  border-radius: 30px 30px 0 0;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.86));
+  backdrop-filter: blur(32px) saturate(180%);
+  -webkit-backdrop-filter: blur(32px) saturate(180%);
+  border-top: 1px solid rgba(255, 255, 255, 0.85);
+  box-shadow: 0 -18px 60px rgba(15, 23, 42, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  color: var(--color-text-primary, #111827);
+  -webkit-overflow-scrolling: touch;
+}
+
+.dark .mobile-tabbar-sheet__panel {
+  background: linear-gradient(180deg, rgba(24, 27, 35, 0.96), rgba(18, 20, 27, 0.92));
+  border-top-color: rgba(255, 255, 255, 0.12);
+  color: var(--color-text-primary, #f9fafb);
+}
+
+.mobile-tabbar-sheet__handle {
+  width: 38px;
+  height: 5px;
+  margin: 2px auto 10px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.18);
+}
+
+.dark .mobile-tabbar-sheet__handle {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.mobile-tabbar-sheet__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.mobile-tabbar-sheet__head h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.mobile-tabbar-sheet__head p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--color-text-secondary, #6b7280);
+}
+
+.mobile-tabbar-sheet__close {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--color-text-secondary, #6b7280);
+}
+
+.dark .mobile-tabbar-sheet__close {
+  background: rgba(255, 255, 255, 0.10);
+}
+
+.mobile-tabbar-sheet__slots {
+  display: flex;
+  gap: 8px;
+  padding: 4px;
+  margin-bottom: 14px;
+  border-radius: 18px;
+  background: rgba(15, 23, 42, 0.05);
+}
+
+.dark .mobile-tabbar-sheet__slots {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.mobile-tabbar-sheet__slot {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 8px 4px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--color-text-tertiary, #9ca3af);
+  font: inherit;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.mobile-tabbar-sheet__slot.is-active {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(255, 255, 255, 0.72));
+  color: var(--liquid-accent);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+.dark .mobile-tabbar-sheet__slot.is-active {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.06));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+.mobile-tabbar-sheet__slot-label {
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.mobile-tabbar-sheet__options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.mobile-tabbar-sheet__option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.5));
+  color: inherit;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85), 0 4px 14px rgba(15, 23, 42, 0.06);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.dark .mobile-tabbar-sheet__option {
+  border-color: rgba(255, 255, 255, 0.10);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(255, 255, 255, 0.04));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10);
+}
+
+.mobile-tabbar-sheet__option:active {
+  transform: scale(0.97);
+}
+
+.mobile-tabbar-sheet__option.is-current {
+  border-color: rgba(var(--liquid-accent-rgb), 0.55);
+  background: linear-gradient(180deg, rgba(var(--liquid-accent-rgb), 0.20), rgba(var(--liquid-accent-rgb), 0.10));
+  color: var(--liquid-accent);
+}
+
+.mobile-tabbar-sheet__option.is-used {
+  opacity: 0.42;
+}
+
+.mobile-tabbar-sheet__option-icon {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.06);
+}
+
+.dark .mobile-tabbar-sheet__option-icon {
+  background: rgba(255, 255, 255, 0.10);
+}
+
+.mobile-tabbar-sheet__option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mobile-tabbar-sheet__option-check {
+  margin-left: auto;
+  flex: none;
+}
+
+.mobile-tabbar-sheet__option-tag {
+  margin-left: auto;
+  flex: none;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--color-text-tertiary, #9ca3af);
+}
+
+.mobile-tabbar-sheet__footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.mobile-tabbar-sheet__reset,
+.mobile-tabbar-sheet__done {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 42px;
+  border: 0;
+  border-radius: 15px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mobile-tabbar-sheet__reset {
+  padding: 0 16px;
+  background: rgba(15, 23, 42, 0.06);
+  color: var(--color-text-secondary, #6b7280);
+}
+
+.dark .mobile-tabbar-sheet__reset {
+  background: rgba(255, 255, 255, 0.10);
+}
+
+.mobile-tabbar-sheet__done {
+  flex: 1 1 auto;
+  padding: 0 20px;
+  background: linear-gradient(180deg, rgba(var(--liquid-accent-rgb), 0.98), rgba(var(--liquid-accent-rgb), 0.84));
+  color: #fff;
+  box-shadow: 0 10px 24px rgba(var(--liquid-accent-rgb), 0.32), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-liquid-shell]::before {
+    animation: none;
+  }
+  .mobile-tabbar__item,
+  .mobile-tabbar-sheet__option,
+  [data-mobile-fab] {
+    transition: none;
+  }
+}
