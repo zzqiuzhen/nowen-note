@@ -58,9 +58,9 @@ const config: CapacitorConfig = {
       showSpinner: false,
     },
     StatusBar: {
-      // 冷启动初始值（浅色背景 → 深色文字）；启动后由 useStatusBarSync 根据主题动态切换。
-      // 注意 Capacitor 的枚举是「文字颜色」：DARK = 深色文字（浅背景用）。
-      style: "DARK",
+      // 冷启动初始值：LIGHT = 深色文字（浅色背景用）。启动后由 useStatusBarSync 按主题切换。
+      // 枚举描述的是文字颜色而不是背景，写反会导致状态栏图标隐形。
+      style: "LIGHT",
       backgroundColor: "#FFFFFF",
     },
     Keyboard: {

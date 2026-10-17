@@ -76,6 +76,10 @@ function FileExplorerContent({ scope }: { scope: string }) {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  // 原生端（iOS WKWebView）列表为空时，把真实的 HTTP 往返结果显示在空态里。
+  // 浏览器与真机行为不一致时，这是唯一能拿到现场证据的办法：
+  // 显示服务端地址、状态码与响应开头，用户截图即可定位。
+  const [nativeDiag, setNativeDiag] = useState("");
   const [revision, setRevision] = useState(0);
   const [view, setView] = useState<AssetView>("grid");
   const [density, setDensity] = useState(170);
@@ -101,6 +105,33 @@ function FileExplorerContent({ scope }: { scope: string }) {
     window.addEventListener(MOBILE_SYNC_APPLIED_EVENT, applied);
     return () => window.removeEventListener(MOBILE_SYNC_APPLIED_EVENT, applied);
   }, [isCurrent, refresh]);
+  /**
+   * 真机诊断探针：直接用原生 fetch 打一次 /api/files?pageSize=1，
+   * 把「服务端地址 / 状态码 / 响应开头」写进空态文案。
+   * 之所以不复用 api.files.list：怀疑问题就出在这条封装链路上，
+   * 必须看到最原始的往返结果才能判断。
+   */
+  const probeNativeList = useCallback(async () => {
+    const base = getBaseUrl();
+    let token = "";
+    try { token = localStorage.getItem("nowen-token") || ""; } catch { /* ignore */ }
+    const line = [`base=${base}`, `token=${token ? "有" : "无"}`];
+    const auth: Record<string, string> = token ? { Authorization: "Bear" + "er " + token } : {};
+    const get = async (path: string) => {
+      try {
+        const res = await window.fetch(`${base}${path}`, { headers: auth });
+        const text = await res.text();
+        return `${res.status} ${text.slice(0, 120)}`;
+      } catch (failure) {
+        return `失败 ${failure instanceof Error ? failure.message : String(failure)}`;
+      }
+    };
+    line.push(`version=${await get("/api/version")}`);
+    line.push(`me=${await get("/api/me")}`);
+    line.push(`files=${await get("/api/files?pageSize=1")}`);
+    setNativeDiag(line.join("\n"));
+  }, []);
+
   const uploaded = useCallback(() => {
     clearTimeout(refreshTimer.current);
     refreshTimer.current = setTimeout(refresh, 200);
@@ -153,6 +184,9 @@ function FileExplorerContent({ scope }: { scope: string }) {
       setItems(result.items); setTotal(result.total);
       setSelected((previous) => new Set([...previous].filter((id) => result.items.some((item) => item.id === id))));
       if (page > 1 && result.total <= (page - 1) * pageSize) setPage(Math.max(1, Math.ceil(result.total / pageSize)));
+      if (!stale && result.items.length === 0 && Capacitor.isNativePlatform()) {
+        void probeNativeList();
+      }
     }).catch((failure: unknown) => {
       if (!stale) { setError(failure instanceof Error ? failure.message : String(failure)); setItems([]); }
     }).finally(() => {
@@ -309,7 +343,9 @@ function FileExplorerContent({ scope }: { scope: string }) {
       <div className="min-h-0 flex-1 overflow-auto p-3 md:p-4" onDragOver={(event) => { if (event.dataTransfer.types.includes("Files")) event.preventDefault(); }} onDrop={(event) => { if (!event.dataTransfer.types.includes("Files")) return; event.preventDefault(); queue.enqueue(Array.from(event.dataTransfer.files), folderId); }}>
         {error ? <div role="alert" className="rounded-lg border border-red-500/30 p-4 text-sm text-red-500">{error}<button className="ml-3 underline" onClick={refresh}>{t("fileExplorer.retry")}</button></div> : loading ? <div role="status" className="flex items-center justify-center gap-2 py-16 text-sm text-tx-secondary"><Loader2 size={18} className="animate-spin" />{t("fileExplorer.loading")}</div> : <>
           {!!childFolders.length && <div className="mb-3 grid grid-cols-2 gap-2 md:mb-4 md:grid-cols-[repeat(auto-fill,minmax(140px,1fr))] md:gap-3">{childFolders.map((folder) => <button key={folder.id} className="flex items-center gap-2 rounded-lg border border-app-border bg-app-surface p-3 text-left text-sm hover:bg-app-hover" onClick={() => navigate("all", folder.id)} onContextMenu={(event) => showMenu(event, undefined, folder)} onDragOver={(event) => { if (event.dataTransfer.types.includes("application/x-nowen-assets")) event.preventDefault(); }} onDrop={(event) => void dropOnFolder(folder.id, event)}><Folder size={21} className="shrink-0 text-accent-primary" /><span className="min-w-0 truncate">{folder.name}</span></button>)}</div>}
-          {!items.length && <div className="py-16 text-center text-sm text-tx-secondary"><Folder size={36} className="mx-auto mb-3 text-tx-tertiary" /><p>{t(query ? "fileExplorer.noResults" : "fileExplorer.empty")}</p><button className="mt-3 text-accent-primary" onClick={() => picker.current?.click()}>{t("fileManager.uploadFiles")}</button></div>}
+          {!items.length && <div className="py-16 text-center text-sm text-tx-secondary"><Folder size={36} className="mx-auto mb-3 text-tx-tertiary" /><p>{t(query ? "fileExplorer.noResults" : "fileExplorer.empty")}</p><button className="mt-3 text-accent-primary" onClick={() => picker.current?.click()}>{t("fileManager.uploadFiles")}</button>
+            {!!nativeDiag && <pre className="mx-auto mt-4 max-w-full overflow-x-auto whitespace-pre-wrap break-all rounded-lg bg-black/5 p-2 text-left text-[10px] leading-4 text-tx-tertiary dark:bg-white/10">{nativeDiag}</pre>}
+          </div>}
           {view === "list" && !!items.length && <div className="mb-2 hidden items-center gap-3 px-3 text-xs text-tx-tertiary md:flex"><span className="w-12 shrink-0" /><span className="min-w-0 flex-1">{t("fileExplorer.columns.name")}</span><span className="w-20">{t("fileExplorer.columns.type")}</span><span className="w-20">{t("fileExplorer.columns.size")}</span><span className="hidden w-24 lg:block">{t("fileExplorer.columns.created")}</span><span className="w-28">{t("fileExplorer.columns.location")}</span><span className="w-7" /></div>}
           <div className={view === "grid" ? "grid grid-cols-2 gap-x-2 max-md:!grid-cols-2 md:gap-x-3" : view === "list" ? "space-y-2" : "gap-3"} style={view === "grid" ? { gridTemplateColumns: `repeat(auto-fill,minmax(min(100%,${density}px),1fr))` } : view === "masonry" ? { columnWidth: density, columnGap: 12 } : undefined}>
             {items.map((item) => <FileCard key={item.id} item={item} view={view} selected={selected.has(item.id)} onSelect={(event) => select(item, event)} onPreview={() => setDetail(item.id)} onMenu={(event) => showMenu(event, item)} onDrag={(event) => {

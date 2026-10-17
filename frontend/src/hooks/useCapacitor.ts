@@ -201,10 +201,11 @@ export function useStatusBarSync() {
     const updateStatusBar = () => {
       const isDark = document.documentElement.classList.contains("dark");
       StatusBar.setStyle({
-        // Capacitor 的枚举容易反着理解：Dark = 深色文字（用于浅色背景），
-        // Light = 浅色文字（用于深色背景）。写反的话，浅色主题下就是白字白底，
-        // 状态栏区域看起来像一条灰色空白带。
-        style: isDark ? Style.Light : Style.Dark,
+        // Capacitor 的枚举描述的是「文字颜色」，名字却相反：
+        //   Style.Dark  = 浅色文字（给深色背景用）
+        //   Style.Light = 深色文字（给浅色背景用）
+        // 浅色主题必须用 Light，否则白字压白底 → 状态栏时间/电量看不见。
+        style: isDark ? Style.Dark : Style.Light,
       }).catch(() => {});
       StatusBar.setBackgroundColor({
         color: isDark ? "#0d1117" : "#ffffff",
