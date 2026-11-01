@@ -12,6 +12,147 @@
 
 <!-- ADD_NEW_HERE -->
 
+## v1.5.3 - 2026-10-23
+
+### ✨ 新增
+
+- **favorites**: support searching favorite notes (8dbbf7d)
+- **calendar**: add mainland China holiday layer (#848) (c8bf442)
+- simplify remote image localization to one-click personal scan (e877bb4)
+- **notes**: support permanent decryption (#875) (0b6eeb7)
+- **ui**: document PushPlus localized JSON webhook setup (61d9cc4)
+- **webhook**: format PushPlus task digest JSON in Chinese (98a6ece)
+- **studio**: fail-closed stacked PR ancestry and release base guard (7042155)
+- **studio**: add opt-in synthetic live-model integration smoke without production data (26b07df)
+- **studio**: show recent AI conversation turns during iterative app editing (8b02cd2)
+- **studio**: integrate AI planner and reversible version history into no-code editor (003c4d3)
+- **studio**: add AI draft review, conversational edits and revision restore panel (9365af5)
+- **studio**: expose authenticated preview and revision history endpoints (a4ad7e5)
+- **studio**: safe model-backed AppSpec drafts with record-preserving validation (9181b6f)
+- **studio**: list and restore owned app revisions safely (eb5634d)
+- **studio**: snapshot committed personal AppSpec revisions with SQLite triggers (8520587)
+- **studio**: add private app library and create entry (bdb174b)
+- **studio**: wire personal app routes, authenticated API and app navigation (8f3645a)
+- **studio**: implement no-code template editor, preview and runnable personal apps (fbf8adc)
+- **studio**: add AppSpec templates and isolation regression tests (ae9e68a)
+- **studio**: expose authenticated personal app API and fix E2E mutation race (1b60f70)
+- **studio**: validate and persist personal AppSpec with revision guards (4abf8b7)
+- **studio**: add user-owned AppSpec storage migration (f93e78f)
+- **apps**: consolidate plugin management in apps (6334c16)
+- **extensions**: add resource-scoped V3 inspectors (9914b80)
+- **extensions**: add V3 dashboards and scoped plugin data (2ae023a)
+- **extensions**: enable V3 apps on the real 1.5.3 host (da6d3bb)
+- **extensions**: add gated V3 app runtime and browser acceptance (cb2ca1f)
+- **extensions**: wire V3 package handling into existing plugin lifecycle (f1d39fd)
+- **extensions**: define V3 manifest and hashed UI asset package validator (627fbe2)
+- **extensions**: add V3 application registry and bridge safety foundations (78ccd31)
+- **release-center**: isolated candidate build safety contracts (#864) (47f63df)
+- **harmony**: align native app with Android frontend (a019344)
+- **release-center**: add gated formal candidate publication (e3cd86c)
+
+### 🐛 修复
+
+- **ci**: isolate share management test databases (28876c5)
+- **release**: use GitHub desktop builds in one-shot publishing (194eb8c)
+- **editor**: persist image rotation and restore direct controls (9f134f4)
+- **navigation**: restore All Notes in the primary rail (c181d16)
+- **i18n**: localize automation workflow interface (60a0a52)
+- **settings**: clarify sync status and connection actions (08b0224)
+- **markdown**: generate shareable image links with file extensions (072725c)
+- **ci**: allow WAL snapshot sidecar during integrity check and clean root-owned tmp volume (a993dd2)
+- **tasks**: resolve MCP reminder and scheduling issues (#871) (24f7bbe)
+- **pushplus**: verify provider code rather than HTTP status alone (d1e39dc)
+- **webhook**: adapt PushPlus digest delivery and check provider acceptance (87f751a)
+- **ci**: recognize merged Studio stages and validate release ancestry (30f2ec2)
+- **plugin**: narrow persisted widget size before enum membership check (8636973)
+- **sync-v2**: tolerate bootstrap windows without Location in auth scope checks (ce9ab3c)
+- **ci**: interpolate GitHub expressions and authenticate release ancestry checks (85fc9fc)
+- **studio**: redact unknown upstream failures and validate AI request payloads (1e47f42)
+- **studio**: fail closed for malformed AI preview requests (fbdced8)
+- **studio**: make editor back navigation return to the app library (9ba655d)
+- **studio**: recognize nested Studio routes under proxy base paths (9a8b079)
+- **studio**: provide explicit accessible names for template choices (8cf9010)
+- **studio**: translate installed extensions section in both locales (efe428d)
+- **desktop**: prepare and verify macOS ffmpeg for each target architecture (6283de3)
+- **release-center**: use canonical npm tarball URLs for desktop builds (f4aec87)
+- **release-center**: align Android candidate version and regression guard (48d8b39)
+- **knowledge-tree**: keep nested note drags stable (581a00b)
+- **editor**: prevent mobile code block DOM remount loops (9e0a605)
+- **editor**: keep slash menu active across plugin reconfiguration (5f0f77c)
+- **i18n**: add missing slash block labels and descriptions (c36e25d)
+- **editor**: align slash keyboard selection with grouped menu order (ab5b9d9)
+- **mobile**: preserve foreign-realm attachment file bytes (583f0b6)
+- **android**: clarify server TLS and protocol connection failures (78f5a04)
+- **dev**: preserve Vite base configuration in development (09535cd)
+- **extensions**: close V3 resource, version and replay validation gaps (797e8f8)
+- respect task digest timezone in webhook timestamps (#867) (8024170)
+- **release-center**: Phase 2B fail-closed CI and atomic formal reservation (#862) (7246db9)
+- **macos**: prepare target sharp runtime and isolate banner loading (ae71c5d)
+- **desktop**: validate sharp runtime dependencies before packaging (da48e7e)
+
+### ♻️ 重构
+
+- **shares**: streamline management layout and actions (6b0b6e5)
+- **plugin**: validate untrusted plugin messages and dashboard preferences without explicit any (8ebf43d)
+- **studio**: share exact privacy-constrained model messages with live diagnostics (466db81)
+
+### 📝 文档
+
+- **skills**: add the Nowen UI design skill (7672e90)
+- **qa**: explicit v1.5.3 studio production-vs-device acceptance matrix (ac87bee)
+- **task-digest**: explain PushPlus JSON setup and delivery verification (d9a8032)
+- **studio**: document P2 provider smoke, data safety and release rollback (92be40c)
+- **qa**: record verified three-platform release-center candidate evidence (669c313)
+- **studio**: document AI privacy, no-code preview and version restore boundaries (986fd83)
+- **studio**: describe no-code AppSpec P0 and rollback limitations (dd3b17b)
+- **macos**: record verified 1.5.2 hotfix package replacement (e26169d)
+- **skills**: streamline AI maintainer guidance (3c6737e)
+- **fpk**: simplify app description for v1.5.2 (6c6ff22)
+- **readme**: refresh bilingual v1.5.2 highlights and release availability (adfef95)
+
+### ✅ 测试
+
+- **release**: close candidate CI and Windows portability gaps (718a5d5)
+- **studio**: restart production container and recover WAL snapshot in isolated volume (533dc77)
+- **studio**: production REST smoke for auth, CAS, privacy, restart and snapshot recovery (fa62dc1)
+- **task-digest**: initialize isolated SQLite before timestamp suite imports (a0b5b0a)
+- **pushplus**: use numeric mock-clock timestamp for Node types (6b0eecd)
+- **pushplus**: cover endpoint safety, localization and provider errors (9fa4ea6)
+- **pushplus**: verify Chinese digest and deadline delivery over HTTPS (ec223ba)
+- **studio**: preserve mock schema isolation without unused destructuring (55d42cc)
+- **release**: await committed plugin completion and clear baseline lint violations (e52debd)
+- **sync-v2**: cover partial-window auth scope without browser Location (52ae484)
+- **sync-v2**: surface durable mobile sync errors for failing multi-device fixtures (f726e87)
+- **studio**: exercise WAL backup, v133→v134 migration, disk restoration and history (ef3b27e)
+- **studio**: verify real HTTP provider contract, privacy and error redaction (5c3347e)
+- **studio**: assert AI provider payload excludes all user record values (e0442f7)
+- **studio**: exercise AI accept, saved revisions and rollback in browser (153aeab)
+- **studio**: validate AI drafts, version rollback, ownership and P0 migrations (1b0f96b)
+- **studio**: cover real no-code app creation in browser and CI (9baf03f)
+- **release-center**: provide a loadable sharp packaging fixture (a91f889)
+- **extensions**: correct V3 example ZIP file count (2505dc1)
+- **extensions**: cover V3 install contract and expose gated app registry (3bfabb8)
+- **release-center**: formal GitHub Release lifecycle safety and recovery (#863) (186e231)
+
+### 🤖 CI
+
+- **studio**: run production RC on release branch changes and cancel superseded builds (f4c79ce)
+- **studio**: production Docker runtime acceptance on disposable volumes (18166a5)
+- **task-digest**: run PushPlus and timezone delivery regression tests (972cd8d)
+- **studio**: add fail-closed P3 release gate comparing base vs candidate Sync V2 (487d620)
+- **studio**: enforce provider wire and backup restore contracts in V3 foundation (02ed82c)
+- **studio**: retry transient npm network resets for browser acceptance (7ddc569)
+- **extensions**: isolate database imports in V3 foundation tests (0affc5e)
+- **extensions**: verify V3 foundation and V2 UI gate regressions (e275f23)
+- **release-center**: register isolated candidate workflow on main (#865) (ab2e294)
+- **release**: collect and verify desktop assets on GitHub (bea1fe8)
+
+### 🔧 其他
+
+- **ui**: improve task project discovery and settings presentation (1b1a211)
+- **studio**: reconcile overlapping release fixes before P0 branch update (a5da58e)
+- **harmony**: prepare AppGallery listing assets and release notes (3b7579f)
+
 ## v1.5.2 - 2026-10-16
 
 ### ✨ 新增
@@ -423,6 +564,12 @@
 - **sync**: remove unused local deletion import after retention guard (854ec25)
 
 ## 未发布 / Unreleased
+
+- **macOS / #861**：为 Intel 与 Apple Silicon 构建补齐匹配后端 sharp 版本的目标架构依赖，打包前后校验原生库版本与 Mach-O 架构；分享横幅按需加载图片处理库，避免其加载失败阻断后端启动。Prepare target-specific sharp/libvips packages for both macOS architectures, validate native versions and Mach-O headers before and after packing, and load banner processing on demand. 本地回归、GitHub 双架构构建和包内运行检查通过，已替换 1.5.2 macOS 分发资产；Intel 真机安装验收待完成。Local regressions, GitHub builds and packaged-runtime checks passed; v1.5.2 macOS assets replaced, with Intel hardware installation acceptance still pending. [验证记录 / Validation](./docs/qa/issue-861-macos-sharp.md)。
+
+- **maintenance / Release Center Phase 2B**：新增既有正式 Tag 构建接管、Windows Full/Lite 与三平台内容复核、独立凭据的 Draft/审批/发布源码，加入写入意图对账与防覆盖约束。写开关默认关闭，测试按要求延后，正式构建编排仍待实现，不能视为可发布。Add source implementation for legacy formal-run import, complete desktop verification and gated Draft/approval/publication with durable write reconciliation; runtime acceptance and new formal build orchestration remain pending. [源码与未验收记录](./docs/qa/v1.5.2/release-center-phase2b.md)。
+
+- **maintenance / 发布流程**：将同 Tag 的 macOS、Windows CI 产物汇总与远端更新校验移至 GitHub Runner；本地仅轮询进度并核对绑定请求和资产清单的小型回执，保留 Draft/最终发布门禁，修正提前显示“发布成功”。Move same-tag desktop asset collection and remote updater verification to GitHub; keep local receipt checks and Draft/final publication gates, and report success only after verification. 尚未进行真实 Actions 发布联调，见 [维护者说明](./docs/releases/github-release-assets.md)。
 
 - **maintenance / Release Center Phase 3**：新增 Store、Docker Hub 与 NAS 渠道观察、历史记录、固定 Commit 的分发交接计划/JSON 导出和未核实的人工回执；修复 Store 已发布记录被待审修订遮蔽、提交 ID 校验和窄屏输入布局。完成隔离夹具的单元/API、浏览器与构建回归，修复 RC1 CI 测试入口的数据库隔离预加载；保持实际分发禁用，等待 Phase 2 正式审批与内容校验，未进行真实平台联调。Add channel observations, immutable handoff plans and unverified manual receipts; fix published Store status precedence, submission ID validation, narrow layout and RC1 test DB setup. Local unit/API, browser and build checks passed with isolated fixtures; actual distribution stays disabled and live provider integration remains pending. [实现与验证记录](./docs/qa/v1.5.2/release-center-phase3.md)。
 

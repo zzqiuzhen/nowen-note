@@ -1,4 +1,4 @@
-import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Bell,
@@ -168,10 +168,11 @@ export default function MobileTabBar({ notificationCount = 0 }: { notificationCo
       longPressFired.current = false;
       return;
     }
-    // 先上色（同步、几乎零成本），再让页面切换走 transition 低优先级渲染，
-    // 避免重页面挂载把这一帧的点击反馈一起卡住。
+    // 先上色（同步、几乎零成本），再同步切换视图。
+    // 不用 startTransition：低优先级更新会把“旧页面已卸载、新页面还没挂好”
+    // 的中间帧画出来，WKWebView 上就是一次白闪。
     setPendingAction(action);
-    startTransition(() => activate(action));
+    activate(action);
   }, [activate]);
 
   // 目标视图已经生效、或 500ms 后仍没切过去（例如设置/通知这类不发状态的动作），

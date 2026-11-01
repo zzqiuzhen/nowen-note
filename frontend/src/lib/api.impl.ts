@@ -80,6 +80,7 @@ import {
 } from "@/lib/authSession";
 import { isMobileLocalMode, MobileLocalModeRemoteRequestError } from "@/lib/mobileLocalMode";
 import { createHttpRequestError, safeDiagnosticRequestTarget } from "./httpError";
+import { classifyConnectionFailure, type ServerConnectionDiagnostic } from "./serverConnectionDiagnostics";
 
 // 本模块所有显式携带 Authorization 的请求共享同一套 401 刷新与单飞锁；
 // 公共请求不带 Authorization，authSession 会原样透传。
@@ -2872,6 +2873,7 @@ export const api = {
     ): Promise<{
       id: string;
       url: string;
+      imageUrl?: string;
       mimeType: string;
       size: number;
       filename: string;
@@ -5115,6 +5117,8 @@ export async function withSudo<T>(
 export interface ServerProbeResult {
   ok: boolean;
   error?: string;
+  /** 连接失败时的结构化诊断（证书 / 协议 / DNS 等），登录页据此给出可读原因。 */
+  diagnostic?: ServerConnectionDiagnostic;
   /** 实际生效的服务器地址（可能是内网地址，或自动回退协议后的地址）。 */
   endpointUrl?: string;
   /** 生效地址的探活耗时（毫秒）。 */
@@ -5136,6 +5140,8 @@ export interface ServerProbeResult {
 interface HealthProbeAttempt {
   ok: boolean;
   error?: string;
+  diagnostic?: ServerConnectionDiagnostic;
+  transportError?: boolean;
   htmlResponse?: boolean;
   proxyRewrittenApiPath?: string;
 }
@@ -5162,6 +5168,9 @@ async function probeHealthCandidate(candidate: ServerPathCandidate): Promise<Hea
     const res = await globalThis.fetch(url, { signal: controller.signal, redirect: "manual" });
     const contentType = res.headers.get("content-type") || "";
     const text = await res.text();
+    if (res.status === 400 && url.startsWith("http:") && /The plain HTTP request was sent to HTTPS port/i.test(text)) {
+      return { ok: false, error: "HTTP 400", diagnostic: { kind: "httpsRequired" } };
+    }
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
     if (contentType.includes("text/html") || /^\s*</.test(text)) {
       return { ok: false, htmlResponse: true, error: "返回了网页 HTML，而不是 Nowen Note API" };
@@ -5181,9 +5190,9 @@ async function probeHealthCandidate(candidate: ServerPathCandidate): Promise<Hea
       proxyRewrittenApiPath: res.headers.get("x-nowen-proxy-compatibility-path") || undefined,
     };
   } catch (caughtError: unknown) {
-      const error = caughtError as Error & { code?: string };
+    const error = caughtError as Error & { code?: string };
     if (error?.name === "AbortError") return { ok: false, error: "连接超时" };
-    return { ok: false, error: error?.message || "连接失败" };
+    return { ok: false, error: error?.message || "连接失败", transportError: true, diagnostic: classifyConnectionFailure(error?.message || "") };
   } finally {
     clearTimeout(timeout);
   }
@@ -5241,9 +5250,11 @@ export async function testServerConnection(
 
   const errors: string[] = [];
   let sawHtml = false;
+  let failureDiagnostic: ServerConnectionDiagnostic | undefined;
   const record = (entries: ProbedHealthCandidate[]) => {
     for (const entry of entries) {
       if (entry.attempt.ok) continue;
+      failureDiagnostic ||= entry.attempt.diagnostic;
       sawHtml ||= entry.attempt.htmlResponse === true;
       errors.push(`${entry.candidate.apiPath}（${entry.candidate.serverBaseUrl}）: ${entry.attempt.error || "不可用"}`);
     }
@@ -5283,7 +5294,7 @@ export async function testServerConnection(
       ? "检测到可访问的网页，但标准及兼容 API 路径均不可用。请检查反向代理是否转发 API 请求。"
       : `未检测到 Nowen Note API（${errors.join("；")}）。已同时尝试 http 与 https 两种协议。`;
     console.error("[api] server probe failed", { serverUrl: base, errors });
-    return { ok: false, apiOk: false, websocketOk: false, error };
+    return { ok: false, apiOk: false, websocketOk: false, error, diagnostic: failureDiagnostic };
   }
 
   const websocketCandidates = [
