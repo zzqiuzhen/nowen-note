@@ -31,24 +31,44 @@ export default defineConfig(({ mode }) => ({
     },
     // iOS 16.0 的 WebKit 还没有 RegExp lookbehind：构造 /(?<=…)/ 会抛
     // "Invalid regular expression: invalid group specifier name"。react-markdown 只要渲染到
-    // 一条笔记就整棵树失败，表现就是白屏。mdast-util-gfm-autolink-literal 的邮箱正则左侧
-    // 边界在 findEmail()/previous() 里已经二次校验过，lookbehind 属于冗余，构建时去掉。
+    // 一条笔记就整棵树失败，表现就是白屏；prettier 的 markdown 插件也内联了同一段正则，
+    // 格式化 Markdown 代码块时同样会炸。
+    // mdast-util-gfm-autolink-literal 的邮箱正则左侧边界在 findEmail()/previous() 里已经
+    // 二次校验过，lookbehind 属于冗余，构建时去掉即可。
     {
       name: "strip-regexp-lookbehind-for-ios16",
       enforce: "pre" as const,
       transform(code: string, id: string) {
-        if (!id.includes("mdast-util-gfm-autolink-literal")) return null;
-        const before = "/(?<=^|\\s|\\p{P}|\\p{S})([-.\\w+]+)@([-\\w]+(?:\\.[-\\w]+)+)/gu";
-        const after = "/([-.\\w+]+)@([-\\w]+(?:\\.[-\\w]+)+)/gu";
-        if (code.includes(before)) return { code: code.replace(before, after), map: null };
-        // Fail the build instead of shipping an IPA that white-screens on iOS 16.
-        if (id.endsWith("gfm-autolink-literal/lib/index.js")) {
+        const isMdast = id.includes("mdast-util-gfm-autolink-literal");
+        const isPrettierMarkdown = id.includes("prettier/plugins/markdown");
+        if (!isMdast && !isPrettierMarkdown) return null;
+        const pairs: Array<[string, string]> = [
+          // ESM 源码里的正则字面量
+          [
+            "(?<=^|\\s|\\p{P}|\\p{S})([-.\\w+]+)@([-\\w]+(?:\\.[-\\w]+)+)",
+            "([-.\\w+]+)@([-\\w]+(?:\\.[-\\w]+)+)",
+          ],
+          // prettier 预构建产物里的字符串写法（反斜杠已经转义过一层）
+          [
+            "(?<=^|\\\\s|\\\\p{P}|\\\\p{S})([-.\\\\w+]+)@([-\\\\w]+(?:\\\\.[-\\\\w]+)+)",
+            "([-.\\\\w+]+)@([-\\\\w]+(?:\\\\.[-\\\\w]+)+)",
+          ],
+        ];
+        let out = code;
+        let changed = false;
+        for (const [before, after] of pairs) {
+          if (!out.includes(before)) continue;
+          out = out.split(before).join(after);
+          changed = true;
+        }
+        if (changed) return { code: out, map: null };
+        // 宁可构建失败，也不要发出一个在 iOS 16 上白屏的包。
+        if (isMdast && id.endsWith("gfm-autolink-literal/lib/index.js")) {
           throw new Error("strip-regexp-lookbehind-for-ios16: email regex not found in " + id);
         }
         return null;
       },
-    },
-  ],
+    },  ],
   define: {
     // 编译期常量；使用 JSON.stringify 确保是带引号的字符串字面量
     __APP_VERSION__: JSON.stringify(APP_VERSION),
