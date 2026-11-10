@@ -115,7 +115,7 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             [
                 "hidden": window.isHidden,
                 "alpha": Double(window.alpha),
-                "level": Double(window.windowLevel),
+                "level": Double(window.windowLevel.rawValue),
                 "isKey": window.isKeyWindow,
                 "bounds": String(describing: window.bounds),
                 "root": window.rootViewController.map { String(describing: type(of: $0)) } ?? "nil",
