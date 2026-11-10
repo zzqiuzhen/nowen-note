@@ -2,6 +2,7 @@ import path from "path"
 import fs from "node:fs"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
+import { guardLookbehindCalls, findUnguardedLookbehind } from "./config/lookbehindGuard"
 
 // 读取根 package.json 的 version，注入到前端以便 UI 展示真实版本号
 // （release.sh 会在发布时更新根 package.json 的 version 字段）
@@ -10,21 +11,17 @@ const rootPkg = JSON.parse(
 ) as { version?: string }
 const APP_VERSION = rootPkg.version || "0.0.0"
 
-// Text forms of every RegExp lookbehind that must be rewritten for iOS 16 builds.
-// Matched against file text, so backslashes appear exactly as they do in the bundle.
+// iOS 16.0 / 16.0.x WebKit 没有 RegExp lookbehind（Safari 16.4 才加）。
+// 这里的源码级重写只覆盖 mdast-util-gfm-autolink-literal（源码里就是正则字面量，
+// 字面量带 lookbehind 会让整个 chunk 在解析阶段就 SyntaxError）。
+// 其余字符串形式的 `new RegExp("(?<=...)")` 由 config/lookbehindGuard.ts 在产物层统一兜住。
 const LOOKBEHIND_REWRITES: Array<[string, string]> = [
   // mdast-util-gfm-autolink-literal: regex literal in source
   [String.raw`(?<=^|\s|\p{P}|\p{S})([-.\w+]+)@([-\w]+(?:\.[-\w]+)+)`,
    String.raw`([-.\w+]+)@([-\w]+(?:\.[-\w]+)+)`],
   // same regex as a prebuilt string literal (backslashes doubled)
-  [String.raw`(?<=^|\\s|\\p{P}|\\p{S})([-\\w+]+)@([-\w]+(?:\\.[-\w]+)+)`,
-   String.raw`([-\\w+]+)@([-\w]+(?:\\.[-\w]+)+)`],
-  // prettier markdown: blockquote line-break counting, built at module evaluation
-  [String.raw`(?<!\\\\)(?:\\\\\\\\)*(?:&NewLine;|&#0*10;|&#[Xx]0*[Aa];)`,
-   String.raw`(?:^|[^\\\\])(?:\\\\\\\\)*(?:&NewLine;|&#0*10;|&#[Xx]0*[Aa];)`],
-  // prettier yaml: comment splitting; keep the original regex but add a fallback
-  [String.raw`new RegExp("(?<!^| ) (?! |$)")`,
-   String.raw`(()=>{try{return new RegExp("(?<!^| ) (?! |$)")}catch(_e){return /(?:^| ) {1,}/}})()`],
+  [String.raw`(?<=^|\\s|\\p{P}|\\p{S})([-\\w+]+)@([-\\w]+(?:\\.[-\\w]+)+)`,
+   String.raw`([-\\w+]+)@([-\\w]+(?:\\.[-\\w]+)+)`],
 ];
 
 export default defineConfig(({ mode }) => ({
@@ -65,30 +62,42 @@ export default defineConfig(({ mode }) => ({
         return { code: out, map: null };
       },
     },
-    // Final gate: never publish a chunk that still carries lookbehind. A build failure
-    // here is cheaper than another white-screen IPA.
+    // 产物层兜底：把 `new RegExp("...(?<=...)")` 改写成“引擎支持就用原式、不支持就降级
+    // 去掉 lookbehind”的 IIFE。iOS 16.0 上这类构造会抛
+    // `Invalid regular expression: invalid group specifier name`；在 React 渲染期抛出
+    // 就是整页白屏（MotionPhotoOverlay 就是这么炸的）。
     {
-      name: "verify-no-regexp-lookbehind-ios16",
+      name: "guard-regexp-lookbehind-for-ios16",
       apply: "build" as const,
       generateBundle(this: any, _options: any, bundle: Record<string, any>) {
         for (const item of Object.values(bundle)) {
           if (!item || item.type !== "chunk" || !String(item.fileName).endsWith(".js")) continue;
-          let code: string = item.code;
-          let rewritten = false;
-          for (const [before, after] of LOOKBEHIND_REWRITES) {
-            if (!code.includes(before)) continue;
-            code = code.split(before).join(after);
-            rewritten = true;
-          }
-          if (rewritten) item.code = code;
-          if (!/\(\?<[=!]/.test(code)) continue;
-          // Rollup reports file names with the assets/ prefix, so match on the base name.
+          const result = guardLookbehindCalls(item.code as string);
+          if (!result.wrapped) continue;
+          item.code = result.code;
+          item.map = null;
+        }
+      },
+    },
+    // Final gate: 宁可构建失败，也不再发一个白屏包。
+    {
+      name: "verify-no-regexp-lookbehind-ios16",
+      apply: "build" as const,
+      generateBundle(this: any, _options: any, bundle: Record<string, any>) {
+        const failures: string[] = [];
+        for (const item of Object.values(bundle)) {
+          if (!item || item.type !== "chunk" || !String(item.fileName).endsWith(".js")) continue;
+          const code: string = item.code;
+          const issues = findUnguardedLookbehind(code);
+          if (!issues.length) continue;
+          // mermaid 在运行时用 try/catch 探测 lookbehind 支持并保留降级路径，
+          // 命中都来自懒加载 chunk 里的支持探测，放行。
           const base = String(item.fileName).split("/").pop() || "";
-          // mermaid: upstream probes support with new RegExp inside try/catch.
           if (base.startsWith("mermaid")) continue;
-          // yaml: the single remaining hit is wrapped and falls back without lookbehind.
-          if (base.startsWith("yaml") && code.includes("catch(_e){return")) continue;
-          this.error("[ios16-lookbehind] unsupported lookbehind survived bundling in " + name);
+          failures.push(`${base}: ${issues[0].slice(0, 240).replace(/\s+/g, " ")}`);
+        }
+        if (failures.length) {
+          this.error("[ios16-lookbehind] 仍有会在 iOS 16.0 上抛错的正则：\n  " + failures.join("\n  "));
         }
       },
     },
