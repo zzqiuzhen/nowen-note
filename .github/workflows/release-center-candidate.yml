@@ -1,0 +1,250 @@
+# Phase 2C: unsigned desktop candidates only. No version tag or GitHub Release.
+name: Release Center Candidate (isolated)
+run-name: Release Center candidate ${{ inputs.request_id }}
+on:
+  workflow_call:
+    inputs:
+      request_id: { required: true, type: string }
+      commit_sha: { required: true, type: string }
+      version: { required: true, type: string }
+      platforms: { required: true, type: string }
+      mac_signing: { required: false, type: boolean, default: false }
+    secrets:
+      MAC_CSC_LINK: { required: false }
+      MAC_CSC_KEY_PASSWORD: { required: false }
+      APPLE_ID: { required: false }
+      APPLE_APP_SPECIFIC_PASSWORD: { required: false }
+      APPLE_TEAM_ID: { required: false }
+  workflow_dispatch:
+    inputs:
+      request_id:
+        description: Unique request UUID
+        required: true
+        type: string
+      commit_sha:
+        description: Immutable 40-character lowercase Commit SHA
+        required: true
+        type: string
+      version:
+        description: Expected stable X.Y.Z version
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: release-center-candidate-${{ inputs.request_id }}
+  cancel-in-progress: false
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate inputs before source checkout
+        env:
+          RC_REQUEST_ID: ${{ inputs.request_id }}
+          RC_SHA: ${{ inputs.commit_sha }}
+          RC_VERSION: ${{ inputs.version }}
+        run: |
+          node <<'NODE'
+          const e = process.env;
+          if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(e.RC_REQUEST_ID || "") ||
+              !/^[a-f0-9]{40}$/.test(e.RC_SHA || "") ||
+              !/^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/.test(e.RC_VERSION || ""))
+            throw Error("Invalid candidate UUID, immutable SHA or stable version");
+          NODE
+  contracts:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.1"
+          cache: npm
+      - name: Validate exact checkout SHA and all version files
+        shell: bash
+        env:
+          RC_SHA: ${{ inputs.commit_sha }}
+          RC_VERSION: ${{ inputs.version }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$RC_SHA"
+          node <<'NODE'
+          const fs = require("node:fs");
+          const expected = process.env.RC_VERSION;
+          for (const path of ["package.json", "package-lock.json", "backend/package.json", "backend/package-lock.json"]) {
+            const data = JSON.parse(fs.readFileSync(path, "utf8"));
+            if (data.version !== expected || (path.endsWith("package-lock.json") && data.packages?.[""]?.version !== expected))
+              throw Error("Candidate version mismatch: " + path);
+          }
+          const android = fs.readFileSync("frontend/android/app/build.gradle", "utf8");
+          if (android.match(/versionName\s+["']([^"']+)/)?.[1] !== expected)
+            throw Error("Candidate Android version mismatch");
+          NODE
+      - run: npm ci
+      - name: Existing release and Store isolation tests
+        run: npm run test:update-release && npm run test:microsoft-store
+  build:
+    if: inputs.platforms != '[]'
+    needs: [validate, contracts]
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ${{ fromJSON(inputs.platforms || '["windows","macos","linux"]') }}
+    runs-on: ${{ matrix.platform == 'windows' && 'windows-latest' || matrix.platform == 'macos' && 'macos-latest' || 'ubuntu-latest' }}
+    timeout-minutes: 240
+    env:
+      NODE_OPTIONS: --max-old-space-size=4096
+      CSC_IDENTITY_AUTO_DISCOVERY: ${{ inputs.mac_signing && matrix.platform == 'macos' && 'true' || 'false' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit_sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.1"
+          cache: npm
+      - name: Verify exact source
+        shell: bash
+        env:
+          RC_SHA: ${{ inputs.commit_sha }}
+          RC_VERSION: ${{ inputs.version }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$RC_SHA"
+          test "$(node -p "require('./package.json').version")" = "$RC_VERSION"
+      - name: Prepare unified release source
+        if: inputs.platforms != ''
+        env:
+          NOWEN_OFFICIAL_REGISTRY_TRUST_ROOTS_JSON: ${{ vars.NOWEN_OFFICIAL_REGISTRY_TRUST_ROOTS_JSON }}
+        run: node scripts/release-cloud-ci.mjs prepare
+      - name: Preload SHA-256 verified FFmpeg 6.1.1 for release packaging
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: node scripts/release-cloud-ffmpeg.mjs --prepare
+      - name: Build app source
+        shell: bash
+        run: |
+          npm ci
+          (cd backend && npm ci)
+          node scripts/release-cloud-ffmpeg.mjs --install
+          (cd frontend && npm ci)
+          npm run fetch:node
+          npm run build:all
+      - name: Rebuild native modules (Windows)
+        if: matrix.platform == 'windows'
+        shell: bash
+        run: npm run rebuild:native
+      - name: Build unsigned Windows Full
+        if: matrix.platform == 'windows'
+        shell: bash
+        run: npx electron-builder --config electron/builder.config.js --win --publish never
+      - name: Build unsigned Windows Lite
+        if: matrix.platform == 'windows'
+        shell: bash
+        run: npx electron-builder --config electron/builder.lite.config.js --win --publish never
+      - name: Verify macOS packaging contracts
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: node --test scripts/tests/macos-sharp.test.cjs scripts/tests/rebuild-native.test.cjs
+      - name: Build macOS Intel
+        if: matrix.platform == 'macos'
+        shell: bash
+        env:
+          CSC_LINK: ${{ inputs.mac_signing && secrets.MAC_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ inputs.mac_signing && secrets.MAC_CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ inputs.mac_signing && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ inputs.mac_signing && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ inputs.mac_signing && secrets.APPLE_TEAM_ID || '' }}
+          GH_TOKEN: ${{ github.token }}
+          NOWEN_MAC_ARCH: x64
+          TARGET_ARCH: x64
+          npm_config_target_arch: x64
+        run: |
+          if [ "$CSC_IDENTITY_AUTO_DISCOVERY" = "true" ]; then
+            test -n "$CSC_LINK" && test -n "$CSC_KEY_PASSWORD" && test -n "$APPLE_ID" && test -n "$APPLE_APP_SPECIFIC_PASSWORD" && test -n "$APPLE_TEAM_ID"
+          else
+            unset CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+          fi
+          node scripts/release-cloud-ffmpeg.mjs --install --platform=darwin --arch=x64
+          npm run rebuild:native -- --target-platform=darwin --target-arch=x64
+          npx electron-builder --config electron/builder.config.js --mac --publish never
+      - name: Build macOS Apple Silicon
+        if: matrix.platform == 'macos'
+        shell: bash
+        env:
+          CSC_LINK: ${{ inputs.mac_signing && secrets.MAC_CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ inputs.mac_signing && secrets.MAC_CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ inputs.mac_signing && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ inputs.mac_signing && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ inputs.mac_signing && secrets.APPLE_TEAM_ID || '' }}
+          GH_TOKEN: ${{ github.token }}
+          NOWEN_MAC_ARCH: arm64
+          TARGET_ARCH: arm64
+          npm_config_target_arch: arm64
+        run: |
+          if [ "$CSC_IDENTITY_AUTO_DISCOVERY" = "true" ]; then
+            test -n "$CSC_LINK" && test -n "$CSC_KEY_PASSWORD" && test -n "$APPLE_ID" && test -n "$APPLE_APP_SPECIFIC_PASSWORD" && test -n "$APPLE_TEAM_ID"
+          else
+            unset CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+          fi
+          node scripts/release-cloud-ffmpeg.mjs --install --platform=darwin --arch=arm64
+          npm run rebuild:native -- --target-platform=darwin --target-arch=arm64
+          npx electron-builder --config electron/builder.config.js --mac --publish never
+      - name: Linux desktop contract tests
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: npm run test:linux-desktop
+      - name: Install Linux desktop validator
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: sudo apt-get update && sudo apt-get install -y desktop-file-utils
+      - name: Build unsigned Linux
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          npm run rebuild:native
+          npx electron-builder --config electron/builder.config.js --linux --publish never
+          npm run verify:linux-desktop
+      - name: Check exact candidate assets and stage evidence
+        shell: bash
+        env:
+          RC_PLATFORM: ${{ matrix.platform }}
+          RC_SHA: ${{ inputs.commit_sha }}
+          RC_VERSION: ${{ inputs.version }}
+          RC_REQUEST_ID: ${{ inputs.request_id }}
+        run: node scripts/release-center-stage-candidate.mjs
+      - name: Record macOS signature and notarization evidence
+        if: inputs.platforms != '' && matrix.platform == 'macos'
+        env:
+          RC_MAC_SIGNING: ${{ inputs.mac_signing }}
+          RC_VERSION: ${{ inputs.version }}
+          RC_SHA: ${{ inputs.commit_sha }}
+          RC_REQUEST_ID: ${{ inputs.request_id }}
+        run: node scripts/release-cloud-ci.mjs mac-proof
+      - uses: actions/upload-artifact@v4
+        if: inputs.platforms != '' && matrix.platform == 'macos'
+        with:
+          name: release-macos-proof
+          path: mac-proof/signature.json
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload nonpublishing candidate packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.platforms != '' && format('release-{0}', matrix.platform) || format('rc-candidate-{0}-{1}', inputs.request_id, matrix.platform) }}
+          path: rc-candidate/${{ matrix.platform }}/assets/*
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload separate SHA evidence, not approval
+        if: inputs.platforms == ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: rc-candidate-evidence-${{ inputs.request_id }}-${{ matrix.platform }}
+          path: rc-candidate/${{ matrix.platform }}/candidate-evidence.json
+          if-no-files-found: error
+          retention-days: 7

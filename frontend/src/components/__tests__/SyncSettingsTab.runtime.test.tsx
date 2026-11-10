@@ -1,0 +1,97 @@
+import React, { act } from "react";
+import { createRoot, type Root } from "react-dom/client";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import SyncSettingsTab from "../settings/SyncSettingsTab";
+const mocks = vi.hoisted(() => ({ info: vi.fn(), diagnostics: vi.fn(), migrate: vi.fn(), reset: vi.fn(), android: false, native: false, serverUrl: 'http://127.0.0.1:1234' }));
+vi.mock("@capacitor/core", () => ({ Capacitor: { isNativePlatform: () => mocks.native } }));
+vi.mock("@/lib/desktopBridge", () => ({ getAppInfo: mocks.info, getLiteMigrationProgress: vi.fn(async () => ({progress:{stage:'pending'}})), startLiteMigration: mocks.migrate, resetDesktopLocalAuth: mocks.reset }));
+vi.mock("@/lib/mobileLocalMode", () => ({ isAndroidNativeRuntime: () => mocks.android }));
+vi.mock("@/lib/api", () => ({ getServerUrl: () => mocks.serverUrl }));
+vi.mock("@/lib/authSession", () => ({ getAccessToken: () => "token" }));
+vi.mock("@/lib/syncLocalApi", () => ({
+  fetchSyncDiagnostics: mocks.diagnostics, fetchSyncScopes: async () => ({ items: [] }),
+  exportSyncScope: vi.fn(), copySyncScopeToPersonal: vi.fn(), SyncV2DisabledError: class extends Error {},
+}));
+vi.mock("../settings/SyncSettingsPanel", () => ({ SyncSettingsPanel: () => <span>客户端同步开关</span> }));
+vi.mock("../settings/MobileSyncSettings", () => ({ default: () => <span>Android 同步开关</span> }));
+vi.mock("../settings/ServerConnectionSettings", () => ({ default: () => <span>服务器连接</span> }));
+vi.mock("../settings/ConflictCenter", () => ({ ConflictCenter: () => null }));
+(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+let root: Root, host: HTMLElement;
+beforeEach(() => {
+  vi.clearAllMocks(); mocks.android = false; mocks.native = false; mocks.info.mockResolvedValue(null);
+  mocks.serverUrl = 'http://127.0.0.1:1234';
+  mocks.diagnostics.mockResolvedValue({ deviceId: "device" });
+  host = document.createElement("div"); document.body.appendChild(host); root = createRoot(host);
+});
+afterEach(() => { act(() => root.unmount()); host.remove(); });
+const mount = async () => { await act(async () => root.render(<SyncSettingsTab />)); };
+describe("sync settings across browser and clients", () => {
+  it("explains direct server access in the browser instead of offering a false device-only switch", async () => {
+    await mount();
+    expect(host.textContent).toContain("浏览器直接操作服务器上的数据");
+    expect(host.textContent).not.toContain("同步开关");
+    expect(mocks.diagnostics).not.toHaveBeenCalled();
+  });
+  it("keeps desktop client sync settings", async () => {
+    mocks.info.mockResolvedValue({ mode: "full", runtime: "local" });
+    await mount(); expect(host.textContent).toContain("客户端同步开关");
+  });
+  it("explains the Full install path for a true Lite package without starting a migration", async () => {
+    mocks.info.mockResolvedValue({ mode: 'lite', runtime: 'remote', localRuntimeAvailable: false });
+    await mount();
+    expect(host.textContent).toContain('请安装完整版客户端');
+    expect(host.textContent).not.toContain('开始迁移');
+    expect(mocks.diagnostics).not.toHaveBeenCalled();
+  });
+  it("keeps Android sync settings when there is no desktop bridge", async () => {
+    mocks.android = true;
+    await mount(); expect(host.textContent).toContain("Android 同步开关");
+  });
+  it('offers local download when a Full client is directly signed into its NAS', async () => {
+    mocks.serverUrl = 'https://nas.example.com';
+    mocks.info.mockResolvedValue({mode:'full',runtime:'local',localRuntimeAvailable:true});
+    await mount();
+    expect(host.textContent).toContain('下载到本机，支持离线使用');
+    expect(mocks.diagnostics).not.toHaveBeenCalled();
+  });
+  it("does not identify other native apps as a server browser", async () => {
+    mocks.native = true;
+    await mount(); expect(host.textContent).toContain("客户端同步开关");
+  });
+  it('DCC-006: online users can confirm local login recovery and retry from sync settings', async () => {
+    mocks.serverUrl = 'https://nas.example.com';
+    mocks.info.mockResolvedValue({mode:'lite',runtime:'remote',localRuntimeAvailable:true});
+    mocks.migrate.mockResolvedValue({ok:false,error:'LOCAL_ACCOUNT_REQUIRES_MANUAL_LOGIN'});
+    mocks.reset.mockResolvedValueOnce({ok:false,cancelled:true}).mockResolvedValue({ok:true,token:'local-token'});
+    await mount();
+    await act(async()=>[...host.querySelectorAll('button')].find(item=>item.textContent==='开始迁移')!.click());
+    const recover=()=>[...host.querySelectorAll('button')].find(item=>item.textContent==='offlineAvailability.recoverLocalAccount')!;
+    expect(recover()).toBeDefined();
+    expect(mocks.reset).not.toHaveBeenCalled();
+    await act(async()=>recover().click());
+    expect(mocks.migrate).toHaveBeenCalledOnce();
+    await act(async()=>recover().click());
+    expect(mocks.migrate).toHaveBeenCalledTimes(2);
+    expect(mocks.migrate).toHaveBeenLastCalledWith('https://nas.example.com','token');
+  });
+  async function failMigrationWith(error:string) {
+    mocks.serverUrl = 'https://nas.example.com';
+    mocks.info.mockResolvedValue({mode:'lite',runtime:'remote',localRuntimeAvailable:true});
+    mocks.migrate.mockResolvedValue({ok:false,error});
+    await mount();
+    await act(async()=>[...host.querySelectorAll('button')].find(item=>item.textContent==='开始迁移')!.click());
+  }
+  const recoverButton=()=>[...host.querySelectorAll('button')].find(item=>item.textContent==='offlineAvailability.recoverLocalAccount');
+  it.each(['LOCAL_ACCOUNT_DISABLED','ACCOUNT_LOCKED'])('DCC-006: a %s local account is offered the confirmed recovery button in sync settings', async (code) => {
+    await failMigrationWith(code);
+    expect(host.textContent).toContain('offlineAvailability.localAccountRecoveryHint');
+    expect(host.textContent).not.toContain(code);
+    expect(recoverButton()).toBeDefined();
+  });
+  it.each(['BACKEND_UNAVAILABLE','HTTP_403'])('explains a %s local account failure instead of showing the bare code, without a reset button', async (code) => {
+    await failMigrationWith(code);
+    expect(host.textContent).toContain('offlineAvailability.localAccountUnavailableHint');
+    expect(recoverButton()).toBeUndefined();
+  });
+});

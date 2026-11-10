@@ -1,0 +1,84 @@
+name: Nowen Note v1.5.4 Production Docker Upgrade RC
+
+on:
+  pull_request:
+    paths:
+      - "scripts/studio-rc-runtime-smoke.mjs"
+      - "scripts/studio-rc-docker-run.sh"
+      - ".github/workflows/studio-production-docker-rc.yml"
+      - ".github/workflows/v1.5.4-release-freeze-ci.yml"
+      - "package.json"
+      - "package-lock.json"
+      - "backend/package.json"
+      - "backend/package-lock.json"
+      - "Dockerfile"
+      - "docker-entrypoint.sh"
+      - "backend/src/db/**"
+      - "backend/src/services/backup*.ts"
+      - "backend/src/services/attachment-storage.ts"
+      - "backend/src/plugins/personalStudio*.ts"
+      - "backend/src/db/nowenStudio*.ts"
+      - "backend/src/routes/plugins.ts"
+  push:
+    branches: ["release/v1.5.4"]
+    paths:
+      - "scripts/studio-rc-runtime-smoke.mjs"
+      - "scripts/studio-rc-docker-run.sh"
+      - ".github/workflows/studio-production-docker-rc.yml"
+      - ".github/workflows/v1.5.4-release-freeze-ci.yml"
+      - "package.json"
+      - "package-lock.json"
+      - "backend/package.json"
+      - "backend/package-lock.json"
+      - "Dockerfile"
+      - "docker-entrypoint.sh"
+      - "backend/src/db/**"
+      - "backend/src/services/backup*.ts"
+      - "backend/src/services/attachment-storage.ts"
+      - "backend/src/plugins/personalStudio*.ts"
+      - "backend/src/db/nowenStudio*.ts"
+      - "backend/src/routes/plugins.ts"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: studio-production-rc-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  real-production-docker:
+    name: Production Docker auth, restart and independent WAL restore
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.22.1"
+      - name: Syntax check for smoke runner
+        run: |
+          node --check scripts/studio-rc-runtime-smoke.mjs
+          bash -n scripts/studio-rc-docker-run.sh
+      - name: Checkout previous stable v1.5.3 source
+        uses: actions/checkout@v4
+        with:
+          ref: v1.5.3
+          path: previous-source
+          persist-credentials: false
+      - name: Build previous stable production image
+        run: docker build --pull --tag nowen-studio-previous:v1.5.3 previous-source
+      - name: Build v1.5.4 candidate production image (no push)
+        env:
+          CANDIDATE_SHA: ${{ github.sha }}
+        run: |
+          docker build --pull --tag "nowen-studio-rc:$CANDIDATE_SHA" \
+            --build-arg APP_VERSION=1.5.4 --build-arg "VCS_REF=$CANDIDATE_SHA" .
+      - name: Upgrade v1.5.3 persistent volume to v1.5.4 and verify backup/restore
+        env:
+          RC_OLD_IMAGE: nowen-studio-previous:v1.5.3
+          RC_IMAGE: nowen-studio-rc:${{ github.sha }}
+        run: bash scripts/studio-rc-docker-run.sh

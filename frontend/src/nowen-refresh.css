@@ -1,0 +1,75 @@
+/* =============================================================================
+ * Nowen "Ink & Jade" refresh layer (iOS build)
+ * -----------------------------------------------------------------------------
+ * Loaded after the base sheets. It only refines rhythm and typography; every
+ * colour still comes from the semantic tokens in index.css / appAppearance.ts,
+ * so light, dark and the alternate skins keep working unchanged.
+ * ========================================================================== */
+
+:root {
+  --ink-hairline: color-mix(in srgb, var(--color-text-primary) 8%, transparent);
+  --ink-accent-soft: color-mix(in srgb, var(--color-accent-primary) 10%, transparent);
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* System fonts need tighter tracking as they get bigger. */
+h1, h2, h3, h4, h5, h6,
+.text-lg, .text-xl, .text-2xl, .text-3xl {
+  letter-spacing: -0.014em;
+}
+
+h1, h2 {
+  letter-spacing: -0.022em;
+}
+
+/* Editor prose: a calmer measure and a real reading line height. */
+.ProseMirror {
+  line-height: 1.78;
+}
+
+.ProseMirror h1 { letter-spacing: -0.024em; }
+.ProseMirror h2 { letter-spacing: -0.018em; }
+.ProseMirror blockquote {
+  border-left-width: 2px;
+  font-style: normal;
+}
+.ProseMirror code { border-radius: 6px; }
+
+/* Selection and caret follow the accent instead of the browser default. */
+::selection {
+  background: color-mix(in srgb, var(--color-accent-primary) 24%, transparent);
+}
+
+input, textarea, [contenteditable="true"] {
+  caret-color: var(--color-accent-primary);
+}
+
+/* Slim, quiet scrollbars on desktop; iOS keeps its native overlay. */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-text-primary) 18%, transparent);
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--color-text-primary) 28%, transparent);
+  background-clip: content-box;
+}
+::-webkit-scrollbar-track { background: transparent; }
+
+@media (max-width: 767px) {
+  /* No rubber-band on the shell; inner scrollers keep their own momentum. */
+  body { overscroll-behavior-y: none; }
+  .ProseMirror { font-size: 16.5px; }
+}

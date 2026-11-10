@@ -1,0 +1,12 @@
+appname               = nowen-note
+version               = {{VERSION}}
+display_name          = 弄文笔记
+desc                  = `<h2>Nowen Note v1.5.4</h2><p>开源、自托管的个人知识库与任务工作台，支持笔记、文件、任务、AI 和多端同步。</p><p>升级前请备份数据库和附件，确认持久化目录已正确挂载。</p><p><a href="https://nowen.cn/">官方网站</a> · <a href="https://github.com/cropflre/nowen-note">项目主页</a></p>`
+arch                  = x86_64
+source                = thirdparty
+maintainer            = Nowen
+maintainer_url        = https://github.com/cropflre/nowen-note
+distributor           = Nowen
+distributor_url       = https://github.com/cropflre/nowen-note
+desktop_uidir         = ui
+desktop_applaunchname = nowen-note.Application

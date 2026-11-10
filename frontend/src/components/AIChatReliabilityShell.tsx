@@ -1,0 +1,429 @@
+import AIChatMobileSettings from "./AIChatMobileSettings";
+import NotebookAgentPanel from "./agent/NotebookAgentPanel";
+import { getCurrentWorkspace } from "@/lib/api";
+import { useTranslation } from "react-i18next";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Activity,
+  ChevronDown,
+  ChevronUp,
+  Database,
+  Download,
+  FileText,
+  Layers3,
+  RefreshCw,
+  Scissors,
+  ShieldCheck,
+  SlidersHorizontal,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import OriginalAIChatPanel from "./AIChatPanel";
+import { api } from "@/lib/api";
+import { useApp } from "@/store/AppContext";
+import {
+  exportDiagnosticsFile,
+  getReliableAIStatus,
+  reliableAsk,
+  type ReliableAskMode,
+  type ReliableDiagnostics,
+  type ReliableReference,
+  type ReliableStatus,
+} from "@/lib/aiReliable";
+import { cn } from "@/lib/utils";
+import ChatSkillsPicker from "./aiCollaboration/ChatSkillsPicker";
+import { collaborationScope } from "@/lib/aiCollaboration";
+
+interface Props {
+  onClose: () => void;
+  onNavigateToNote?: (noteId: string) => void;
+}
+
+const CONTEXT_COLLAPSED_KEY = "nowen-ai-reliable-context-collapsed";
+
+const MODE_OPTIONS: Array<{
+  id: ReliableAskMode;
+  label: string;
+  description: string;
+  icon: LucideIcon;
+}> = [
+  { id: "knowledge", label: "知识库检索", description: "沿用面板内的全部知识库或笔记本范围", icon: Database },
+  { id: "current-note", label: "当前整篇笔记", description: "直接读取当前笔记正文，不依赖向量召回", icon: FileText },
+  { id: "selection", label: "选中文本", description: "仅使用选择或粘贴的片段作为证据", icon: Scissors },
+];
+
+function formatTime(value: string | null | undefined): string {
+  if (!value) return "尚未建立";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString();
+}
+
+function StatusPill({ status }: { status: ReliableStatus | null }) {
+  if (!status) return null;
+  const stale = status.index.stale;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium",
+        !status.enabled
+          ? "border-zinc-300 bg-zinc-100 text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400"
+          : stale
+            ? "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-300"
+            : "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700/60 dark:bg-emerald-950/30 dark:text-emerald-300",
+      )}
+    >
+      <ShieldCheck size={11} />
+      {!status.enabled ? "AI 已关闭" : stale ? "索引更新中" : "索引已同步"}
+    </span>
+  );
+}
+
+export default function AIChatReliabilityShell(props: Props) {
+  const { t } = useTranslation();
+  const [isMobile, setIsMobile] = useState(() => typeof window !== "undefined" && window.innerWidth < 768);
+  const [mobileSettingsOpen, setMobileSettingsOpen] = useState(false);
+  const settingsTrigger = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    const media = window.matchMedia?.("(max-width: 767px)");
+    if (!media) return;
+    const changed = () => { setIsMobile(media.matches); setMobileSettingsOpen(false); };
+    changed(); media.addEventListener("change", changed);
+    return () => media.removeEventListener("change", changed);
+  }, []);
+  const [selectedSkillId, setSelectedSkillId] = useState("");
+  const [agentMode, setAgentMode] = useState(false);
+  const [skillScope, setSkillScope] = useState(collaborationScope);
+  const selectedSkill = useRef<{ id: string; scope: string } | null>(null);
+  useEffect(() => {
+    const changed = () => {
+      const scope = collaborationScope();
+      if (selectedSkill.current?.scope !== scope) { selectedSkill.current = null; setSelectedSkillId(""); setMobileSettingsOpen(false); }
+      setSkillScope(scope);
+    };
+    const events = ["nowen:workspace-changed", "nowen:token-changed", "nowen:server-url-changed", "storage"];
+    events.forEach(event => window.addEventListener(event, changed));
+    return () => events.forEach(event => window.removeEventListener(event, changed));
+  }, []);
+  const [workflowWorkspace, setWorkflowWorkspace] = useState(getCurrentWorkspace);
+  useEffect(() => {
+    const changed = () => setWorkflowWorkspace(getCurrentWorkspace());
+    window.addEventListener("nowen:workspace-changed", changed);
+    return () => window.removeEventListener("nowen:workspace-changed", changed);
+  }, []);
+  const { state } = useApp();
+  const activeNote = state.activeNote;
+  const [mode, setMode] = useState<ReliableAskMode>("knowledge");
+  const [selectedText, setSelectedText] = useState("");
+  const [status, setStatus] = useState<ReliableStatus | null>(null);
+  const [statusError, setStatusError] = useState("");
+  const [diagnostics, setDiagnostics] = useState<ReliableDiagnostics | null>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState(false);
+  const [contextCollapsed, setContextCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const saved = window.localStorage.getItem(CONTEXT_COLLAPSED_KEY);
+    return saved === null ? window.innerWidth < 768 : saved === "1";
+  });
+  const originalAskRef = useRef(api.aiAsk);
+
+  const refreshStatus = useCallback(async () => {
+    setLoadingStatus(true);
+    setStatusError("");
+    try {
+      setStatus(await getReliableAIStatus());
+    } catch (error) {
+      setStatusError((error as Error)?.message || "诊断状态加载失败");
+    } finally {
+      setLoadingStatus(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(CONTEXT_COLLAPSED_KEY, contextCollapsed ? "1" : "0");
+    } catch {
+      // Storage can be unavailable in privacy mode; collapsing still works locally.
+    }
+  }, [contextCollapsed]);
+
+  useEffect(() => {
+    void refreshStatus();
+    const timer = window.setInterval(() => void refreshStatus(), 30_000);
+    const refresh = () => void refreshStatus();
+    window.addEventListener("storage", refresh);
+    window.addEventListener("nowen:ai-manual-enabled-changed", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("storage", refresh);
+      window.removeEventListener("nowen:ai-manual-enabled-changed", refresh);
+    };
+  }, [refreshStatus]);
+
+  useEffect(() => {
+    if (mode !== "selection" || selectedText.trim()) return;
+    const browserSelection = window.getSelection()?.toString().trim();
+    if (browserSelection) setSelectedText(browserSelection);
+  }, [mode, selectedText]);
+
+  // Bridge the existing mature chat/session UI to the reliable backend without
+  // duplicating its history, streaming, references, upload and conversation code.
+  useEffect(() => {
+    const previous = api.aiAsk;
+    const patched = async (
+      question: string,
+      history?: { role: string; content: string }[],
+      onChunk?: (chunk: string) => void,
+      onReferences?: (refs: any[]) => void,
+      options?: { notebookId?: string; includeChildren?: boolean },
+    ): Promise<string> => {
+      const skill = selectedSkill.current;
+      if (skill && skill.scope !== collaborationScope()) throw new Error(t("aiCollaboration.chatScopeChanged"));
+      const response = await reliableAsk(
+        {
+          question,
+          ...(skill ? { skillId: skill.id } : {}),
+          history,
+          mode,
+          currentNoteId: activeNote?.id,
+          selectedText,
+          notebookId: mode === "knowledge" ? options?.notebookId : undefined,
+          includeChildren: mode === "knowledge" ? options?.includeChildren : undefined,
+        },
+        {
+          onChunk,
+          onReferences: (references: ReliableReference[]) => onReferences?.(references as any[]),
+          onDiagnostics: (value) => {
+            setDiagnostics(value);
+            setExpanded(value.context.truncated || value.index.stale);
+            void refreshStatus();
+          },
+        },
+      );
+      return response;
+    };
+    (api as any).aiAsk = patched;
+    return () => {
+      if ((api as any).aiAsk === patched) (api as any).aiAsk = previous || originalAskRef.current;
+    };
+  }, [activeNote?.id, mode, refreshStatus, selectedText, t]);
+
+  const currentMode = MODE_OPTIONS.find((item) => item.id === mode)!;
+  const currentNoteUnavailable = mode === "current-note" && !activeNote?.id;
+  const selectionUnavailable = mode === "selection" && !selectedText.trim();
+  const contextWarning = currentNoteUnavailable
+    ? "当前没有打开的笔记，请先打开一篇笔记或切换范围。"
+    : selectionUnavailable
+      ? "请在下方粘贴需要提问的文本；若编辑器中仍有浏览器选区，切换到本模式时会自动读取。"
+      : "";
+
+  const statusSummary = useMemo(() => {
+    if (!status) return "正在读取模型与索引状态";
+    return `${status.provider || "未配置"} · ${status.model || "未选择模型"}`;
+  }, [status]);
+
+  const settingsControls = (
+          <div className={agentMode ? "hidden" : isMobile ? "flex flex-col gap-3" : "contents"}>
+          <div className="mr-1 hidden min-w-0 items-center gap-2 xl:flex">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-accent-primary/10 text-accent-primary">
+              <Activity size={14} />
+            </div>
+            <div className="hidden min-w-0 lg:block">
+              <div className="truncate text-xs font-semibold text-tx-primary">上下文来源</div>
+              <div className="max-w-48 truncate text-[10px] text-tx-tertiary">{statusSummary}</div>
+            </div>
+          </div>
+
+          <div className="order-2 flex w-full min-w-0 items-center gap-1 rounded-xl bg-app-hover/70 p-1 md:order-none md:w-auto">
+            {MODE_OPTIONS.map((item) => {
+              const Icon = item.icon;
+              const disabled = item.id === "current-note" && !activeNote?.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => { setMode(item.id); if (item.id === "selection") setContextCollapsed(false); }}
+                  title={item.description}
+                  className={cn(
+                    "flex min-w-0 flex-1 md:flex-none items-center justify-center gap-1.5 rounded-lg px-2 md:px-2.5 py-1.5 text-[11px] font-medium transition",
+                    mode === item.id
+                      ? "bg-app-surface text-accent-primary shadow-sm ring-1 ring-app-border"
+                      : "text-tx-tertiary hover:text-tx-primary",
+                    disabled && "cursor-not-allowed opacity-40",
+                  )}
+                >
+                  <Icon size={12} className="hidden md:block" />
+                  <span className="truncate">{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="order-3 min-w-0 max-w-full md:order-none">
+            <ChatSkillsPicker key={skillScope} scope={skillScope} value={selectedSkillId} onSelect={id => {
+              setSelectedSkillId(id);
+              selectedSkill.current = id ? { id, scope: skillScope } : null;
+            }} />
+          </div>
+
+          <div className="order-1 ml-auto flex items-center gap-1 md:order-none">
+            <StatusPill status={status} />
+            <button
+              type="button"
+              onClick={() => setContextCollapsed((value) => !value)}
+              className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-medium text-tx-tertiary hover:bg-app-hover hover:text-tx-primary"
+              title={contextCollapsed ? "展开上下文详情" : "收起上下文详情"}
+              aria-expanded={!contextCollapsed}
+            >
+              {contextCollapsed ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+              <span className="hidden xl:inline">{contextCollapsed ? "上下文详情" : "收起详情"}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => void refreshStatus()}
+              className="rounded-lg p-1.5 text-tx-tertiary hover:bg-app-hover hover:text-tx-primary"
+              title="刷新模型与索引状态"
+            >
+              <RefreshCw size={14} className={loadingStatus ? "animate-spin" : ""} />
+            </button>
+          </div>
+          </div>
+  );
+  const settingsDetails = (
+        !agentMode && !contextCollapsed && (
+          <>
+            {mode === "selection" && (
+              <textarea
+                value={selectedText}
+                onChange={(event) => setSelectedText(event.target.value)}
+                placeholder="粘贴选中文本，支持 Markdown、HTML 和富文本 JSON…"
+                rows={3}
+                className="mt-2 max-h-[35vh] min-h-20 w-full resize-y rounded-xl border border-app-border bg-app-bg px-3 py-2 text-xs leading-5 text-tx-primary outline-none placeholder:text-tx-tertiary focus:border-accent-primary"
+              />
+            )}
+
+            {contextWarning && (
+              <p className="mt-2 rounded-lg border border-amber-300/60 bg-amber-50 px-2.5 py-1.5 text-[11px] text-amber-700 dark:border-amber-700/50 dark:bg-amber-950/30 dark:text-amber-300">
+                {contextWarning}
+              </p>
+            )}
+            {statusError && <p className="mt-1 text-[11px] text-red-500">{statusError}</p>}
+
+            <div className="mt-2 max-h-[45vh] overflow-auto rounded-xl border border-app-border bg-app-bg p-3 text-[11px] text-tx-secondary shadow-sm">
+                <div className="mb-3 flex items-center justify-between gap-3 border-b border-app-border pb-2">
+                  <div>
+                    <div className="font-medium text-tx-primary">上下文详情</div>
+                    <div className="mt-0.5 text-[10px] text-tx-tertiary">本次问答使用的模型、范围与索引状态</div>
+                  </div>
+                  {diagnostics ? (
+                    <button
+                      type="button"
+                      onClick={() => setExpanded((value) => !value)}
+                      className={cn(
+                        "inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[10px] font-medium transition-colors",
+                        expanded
+                          ? "bg-accent-primary/10 text-accent-primary"
+                          : "bg-app-hover text-tx-secondary hover:text-tx-primary",
+                      )}
+                    >
+                      <Layers3 size={11} />
+                      {expanded ? "收起检索诊断" : "查看检索诊断"}
+                      {expanded ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
+                    </button>
+                  ) : (
+                    <span className="shrink-0 text-[10px] text-tx-tertiary">完成一次问答后可查看检索诊断</span>
+                  )}
+                </div>
+                <div className="grid grid-cols-[auto_minmax(0,1fr)] [overflow-wrap:anywhere] gap-x-3 gap-y-1.5">
+                  <span className="text-tx-tertiary">本次范围</span>
+                  <span>{currentMode.label}{activeNote?.title && mode === "current-note" ? ` · ${activeNote.title}` : ""}</span>
+                  <span className="text-tx-tertiary">对话模型</span>
+                  <span>{status?.provider || "—"} / {status?.model || "—"}</span>
+                  <span className="text-tx-tertiary">Embedding</span>
+                  <span>{status?.embeddingModel || "未配置（关键词降级可用）"}</span>
+                  <span className="text-tx-tertiary">索引更新时间</span>
+                  <span>{formatTime(status?.index.lastIndexedAt)}</span>
+                  <span className="text-tx-tertiary">索引覆盖</span>
+                  <span>{status ? `${status.index.indexedNotes}/${status.index.totalNotes} 篇笔记，${status.index.indexedAttachments}/${status.index.totalAttachments} 个附件` : "—"}</span>
+                  {diagnostics && (
+                    <>
+                      <span className="text-tx-tertiary">召回路径</span>
+                      <span>{diagnostics.retrieval.join(" + ") || "无命中"}</span>
+                      <span className="text-tx-tertiary">上下文预算</span>
+                      <span>
+                        {diagnostics.context.includedChars.toLocaleString()} / {diagnostics.context.originalChars.toLocaleString()} 字
+                        {diagnostics.context.truncated ? `，已分段并省略 ${diagnostics.context.omittedChars.toLocaleString()} 字` : "，完整读取"}
+                      </span>
+                    </>
+                  )}
+                </div>
+
+                {expanded && diagnostics?.hits.length ? (
+                  <div className="mt-3 space-y-1.5 border-t border-app-border pt-2">
+                    <div className="font-medium text-tx-primary">命中的笔记或分块</div>
+                    {diagnostics.hits.map((hit, index) => (
+                      <div key={`${hit.kind}-${hit.id}-${index}`} className="rounded-lg bg-app-hover px-2 py-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="min-w-0 flex-1 truncate font-medium text-tx-primary">{index + 1}. {hit.title}</span>
+                          <span className="shrink-0 text-tx-tertiary">
+                            {hit.rankReason}{hit.score !== undefined ? ` · ${hit.score.toFixed(3)}` : ""}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 line-clamp-2 text-tx-tertiary">{hit.preview}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+
+                {expanded && diagnostics && (
+                  <button
+                    type="button"
+                    onClick={() => exportDiagnosticsFile(diagnostics)}
+                    className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-app-border px-2.5 py-1.5 font-medium text-tx-secondary hover:bg-app-hover"
+                  >
+                    <Download size={12} />
+                    导出脱敏诊断 JSON
+                  </button>
+                )}
+              </div>
+          </>
+        )
+  );
+
+  return (
+    <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden bg-app-bg">
+      <section className="max-md:max-h-[50dvh] shrink-0 max-md:overflow-y-auto border-b border-app-border bg-app-surface/95 px-3 py-2 backdrop-blur md:px-5">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="inline-flex shrink-0 items-center rounded-lg bg-app-hover/70 p-0.5">
+            {([false, true] as const).map(isAgent => <button key={String(isAgent)} type="button" aria-pressed={agentMode === isAgent}
+              onClick={() => setAgentMode(isAgent)} className={cn("rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors",
+                agentMode === isAgent ? "bg-app-surface text-accent-primary shadow-sm ring-1 ring-app-border" : "text-tx-tertiary hover:text-tx-primary")}>
+              {t(isAgent ? "agent.mode" : "agent.question")}
+            </button>)}
+          </div>
+          {isMobile && !agentMode && <button ref={settingsTrigger} type="button" onClick={() => setMobileSettingsOpen(true)}
+            aria-haspopup="dialog" aria-expanded={mobileSettingsOpen} aria-label={t("aiCollaboration.chatSettings")}
+            className="ml-auto inline-flex min-h-9 min-w-0 items-center gap-1.5 rounded-lg px-2 text-xs text-tx-secondary hover:bg-app-hover">
+            <span className="truncate">{currentMode.label}</span><SlidersHorizontal size={15} className="shrink-0" />
+          </button>}
+          {!isMobile && settingsControls}
+        </div>
+
+        {!isMobile && settingsDetails}
+      </section>
+      {isMobile && <AIChatMobileSettings open={mobileSettingsOpen && !agentMode} onClose={() => setMobileSettingsOpen(false)} trigger={settingsTrigger}>
+        {settingsControls}{settingsDetails}
+      </AIChatMobileSettings>}
+
+      <div hidden={!agentMode} className={cn("min-h-0", agentMode && "flex min-h-0 flex-1 flex-col overflow-hidden")}><NotebookAgentPanel key={workflowWorkspace} workspaceId={workflowWorkspace} onNavigateToNote={props.onNavigateToNote} onOpenEditor={() => {
+        if (!activeNote) return;
+        props.onNavigateToNote?.(activeNote.id);
+        window.dispatchEvent(new Event("nowen:open-editor-agent")); props.onClose();
+      }} /></div>
+
+      <div hidden={agentMode} className={cn("min-h-0 flex-1", (currentNoteUnavailable || selectionUnavailable) && "opacity-70")}>
+        <div className="h-full" hidden={agentMode}><OriginalAIChatPanel {...props} /></div>
+      </div>
+    </div>
+  );
+}
