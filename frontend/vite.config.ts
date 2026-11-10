@@ -10,6 +10,23 @@ const rootPkg = JSON.parse(
 ) as { version?: string }
 const APP_VERSION = rootPkg.version || "0.0.0"
 
+// Text forms of every RegExp lookbehind that must be rewritten for iOS 16 builds.
+// Matched against file text, so backslashes appear exactly as they do in the bundle.
+const LOOKBEHIND_REWRITES: Array<[string, string]> = [
+  // mdast-util-gfm-autolink-literal: regex literal in source
+  [String.raw`(?<=^|\s|\p{P}|\p{S})([-.\w+]+)@([-\w]+(?:\.[-\w]+)+)`,
+   String.raw`([-.\w+]+)@([-\w]+(?:\.[-\w]+)+)`],
+  // same regex as a prebuilt string literal (backslashes doubled)
+  [String.raw`(?<=^|\\s|\\p{P}|\\p{S})([-\\w+]+)@([-\w]+(?:\\.[-\w]+)+)`,
+   String.raw`([-\\w+]+)@([-\w]+(?:\\.[-\w]+)+)`],
+  // prettier markdown: blockquote line-break counting, built at module evaluation
+  [String.raw`(?<!\\\\)(?:\\\\\\\\)*(?:&NewLine;|&#0*10;|&#[Xx]0*[Aa];)`,
+   String.raw`(?:^|[^\\\\])(?:\\\\\\\\)*(?:&NewLine;|&#0*10;|&#[Xx]0*[Aa];)`],
+  // prettier yaml: comment splitting; keep the original regex but add a fallback
+  [String.raw`new RegExp("(?<!^| ) (?! |$)")`,
+   String.raw`(()=>{try{return new RegExp("(?<!^| ) (?! |$)")}catch(_e){return /(?:^| ) {1,}/}})()`],
+];
+
 export default defineConfig(({ mode }) => ({
   // Electron 远端/API-only 模式会直接加载打包后的 frontend/dist/index.html。
   // 使用相对 base，确保 file:// 下 /assets 不会解析到磁盘根目录。
@@ -29,46 +46,52 @@ export default defineConfig(({ mode }) => ({
           .replace(/\s+crossorigin(?=[\s>])/g, "");
       },
     },
-    // iOS 16.0 的 WebKit 还没有 RegExp lookbehind：构造 /(?<=…)/ 会抛
-    // "Invalid regular expression: invalid group specifier name"。react-markdown 只要渲染到
-    // 一条笔记就整棵树失败，表现就是白屏；prettier 的 markdown 插件也内联了同一段正则，
-    // 格式化 Markdown 代码块时同样会炸。
-    // mdast-util-gfm-autolink-literal 的邮箱正则左侧边界在 findEmail()/previous() 里已经
-    // 二次校验过，lookbehind 属于冗余，构建时去掉即可。
+    // iOS 16.0 的 WebKit has no RegExp lookbehind (Safari 16.4 added it). Any
+    // /(?<=...)/ or new RegExp("(?<=...") throws at construction:
+    // "Invalid regular expression: invalid group specifier name" -> the whole React
+    // tree dies -> white screen. Three sources exist in this bundle:
+    //   1) mdast-util-gfm-autolink-literal email regex (loads when a note renders)
+    //   2) prettier markdown line-break counting regex (same chunk, built at module eval)
+    //   3) prettier yaml comment split regex (built when formatting YAML)
+    // mermaid probes support inside try/catch and keeps its fallback, so it is left alone.
     {
       name: "strip-regexp-lookbehind-for-ios16",
       enforce: "pre" as const,
       transform(code: string, id: string) {
-        const isMdast = id.includes("mdast-util-gfm-autolink-literal");
-        const isPrettierMarkdown = id.includes("prettier/plugins/markdown");
-        if (!isMdast && !isPrettierMarkdown) return null;
-        const pairs: Array<[string, string]> = [
-          // ESM 源码里的正则字面量
-          [
-            "(?<=^|\\s|\\p{P}|\\p{S})([-.\\w+]+)@([-\\w]+(?:\\.[-\\w]+)+)",
-            "([-.\\w+]+)@([-\\w]+(?:\\.[-\\w]+)+)",
-          ],
-          // prettier 预构建产物里的字符串写法（反斜杠已经转义过一层）
-          [
-            "(?<=^|\\\\s|\\\\p{P}|\\\\p{S})([-.\\\\w+]+)@([-\\\\w]+(?:\\\\.[-\\\\w]+)+)",
-            "([-.\\\\w+]+)@([-\\\\w]+(?:\\\\.[-\\\\w]+)+)",
-          ],
-        ];
+        if (!/mdast-util-gfm-autolink-literal|prettier[\\/]plugins[\\/](markdown|yaml)/.test(id)) return null;
         let out = code;
-        let changed = false;
-        for (const [before, after] of pairs) {
-          if (!out.includes(before)) continue;
-          out = out.split(before).join(after);
-          changed = true;
-        }
-        if (changed) return { code: out, map: null };
-        // 宁可构建失败，也不要发出一个在 iOS 16 上白屏的包。
-        if (isMdast && id.endsWith("gfm-autolink-literal/lib/index.js")) {
-          throw new Error("strip-regexp-lookbehind-for-ios16: email regex not found in " + id);
-        }
-        return null;
+        for (const [before, after] of LOOKBEHIND_REWRITES) out = out.split(before).join(after);
+        if (out === code) return null;
+        return { code: out, map: null };
       },
-    },  ],
+    },
+    // Final gate: never publish a chunk that still carries lookbehind. A build failure
+    // here is cheaper than another white-screen IPA.
+    {
+      name: "verify-no-regexp-lookbehind-ios16",
+      apply: "build" as const,
+      generateBundle(this: any, _options: any, bundle: Record<string, any>) {
+        for (const item of Object.values(bundle)) {
+          if (!item || item.type !== "chunk" || !String(item.fileName).endsWith(".js")) continue;
+          let code: string = item.code;
+          let rewritten = false;
+          for (const [before, after] of LOOKBEHIND_REWRITES) {
+            if (!code.includes(before)) continue;
+            code = code.split(before).join(after);
+            rewritten = true;
+          }
+          if (rewritten) item.code = code;
+          if (!/\(\?<[=!]/.test(code)) continue;
+          const name = String(item.fileName);
+          // mermaid: upstream probes support with new RegExp inside try/catch.
+          if (name.startsWith("mermaid")) continue;
+          // yaml: the single remaining hit is wrapped and falls back without lookbehind.
+          if (name.startsWith("yaml") && code.includes("catch(_e){return")) continue;
+          this.error("[ios16-lookbehind] unsupported lookbehind survived bundling in " + name);
+        }
+      },
+    },
+  ],
   define: {
     // 编译期常量；使用 JSON.stringify 确保是带引号的字符串字面量
     __APP_VERSION__: JSON.stringify(APP_VERSION),
