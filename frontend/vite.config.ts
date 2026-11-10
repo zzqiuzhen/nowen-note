@@ -82,11 +82,12 @@ export default defineConfig(({ mode }) => ({
           }
           if (rewritten) item.code = code;
           if (!/\(\?<[=!]/.test(code)) continue;
-          const name = String(item.fileName);
+          // Rollup reports file names with the assets/ prefix, so match on the base name.
+          const base = String(item.fileName).split("/").pop() || "";
           // mermaid: upstream probes support with new RegExp inside try/catch.
-          if (name.startsWith("mermaid")) continue;
+          if (base.startsWith("mermaid")) continue;
           // yaml: the single remaining hit is wrapped and falls back without lookbehind.
-          if (name.startsWith("yaml") && code.includes("catch(_e){return")) continue;
+          if (base.startsWith("yaml") && code.includes("catch(_e){return")) continue;
           this.error("[ios16-lookbehind] unsupported lookbehind survived bundling in " + name);
         }
       },
