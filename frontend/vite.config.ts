@@ -15,7 +15,21 @@ export default defineConfig(({ mode }) => ({
   // 使用相对 base，确保 file:// 下 /assets 不会解析到磁盘根目录。
   base: "./",
   root: path.resolve(__dirname),
-  plugins: [react()],
+  plugins: [
+    react(),
+    // WKWebView 在 capacitor:// 自定义 scheme 下会给带 crossorigin 的 module script
+    // 走 CORS 校验；Capacitor 的本地资源处理器不返回 ACAO，脚本被拦就是整页白屏。
+    // 本地资源本来就是同源加载，构建时统一去掉该属性。
+    {
+      name: "strip-crossorigin-for-capacitor",
+      apply: "build" as const,
+      transformIndexHtml(html: string) {
+        return html
+          .replace(/\s+crossorigin(?==)/g, "")
+          .replace(/\s+crossorigin(?=[\s>])/g, "");
+      },
+    },
+  ],
   define: {
     // 编译期常量；使用 JSON.stringify 确保是带引号的字符串字面量
     __APP_VERSION__: JSON.stringify(APP_VERSION),

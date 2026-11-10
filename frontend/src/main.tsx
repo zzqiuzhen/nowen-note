@@ -139,6 +139,7 @@ const publicRoute = resolvePublicNotebookRoute();
 let applicationRendered = false;
 
 function renderApplication() {
+  clearTimeout(bootRenderDeadline);
   if (applicationRendered) return;
   reportBootStage("rendering");
   applicationRendered = true;
@@ -183,6 +184,14 @@ function renderApplication() {
 }
 
 let coreRuntimeInstalled = false;
+
+// 原生 SQLite / Keychain 初始化在个别 WKWebView 上可能永不 settle，await 会把首屏一起拖死
+// （表现为纯白）。增强链路加硬超时：只放弃本地优先能力，不影响渲染登录/工作台。
+const BOOT_RENDER_DEADLINE_MS = 4000;
+const bootRenderDeadline = setTimeout(() => {
+  if (coreRuntimeInstalled) renderApplication();
+}, BOOT_RENDER_DEADLINE_MS);
+
 Promise.resolve()
   .then(() => import("./lib/coreRuntimeInstallers"))
   .then(({ installCoreRuntime }) => {
@@ -190,7 +199,10 @@ Promise.resolve()
     coreRuntimeInstalled = true;
   })
   .then(() => initializeDesktopLocalSession().catch(error => reportBootError('desktop-local-session',error,false)))
-  .then(() => initializeMobileLocalFirstRuntime())
+  .then(() => Promise.race([
+    initializeMobileLocalFirstRuntime(),
+    new Promise<void>((resolve) => setTimeout(resolve, 3000)),
+  ]))
   .then(
     () => renderApplication(),
     (error) => {

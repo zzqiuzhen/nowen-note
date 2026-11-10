@@ -390,10 +390,10 @@
           diagnostics.errors.push({
             at: new Date().toISOString(),
             source: "boot-timeout",
-            message: "Application did not become ready within 60 seconds (stage: " + diagnostics.stage + ")"
+            message: "Application did not become ready within 20 seconds (stage: " + diagnostics.stage + ")"
           });
           showBootFailure("BOOT_TIMEOUT");
-        }, 60000);
+        }, 20000);
       })();
     </script>
   </head>
