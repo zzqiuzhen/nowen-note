@@ -14,6 +14,7 @@ import CommentManagementCenter from "@/components/CommentManagementCenter";
 import { openNoteComment } from "@/lib/noteCommentNavigation";
 import { openWorkspaceIssue, parseIssueAppPath } from "@/lib/workspaceIssueNavigation";
 import NavRail from "@/components/NavRail";
+import MobileTabBar from "@/components/MobileTabBar";
 import SettingsModal from "@/components/SettingsModal";
 import { useRailMode } from "@/hooks/useRailMode";
 import { useMobileRailHidden } from "@/hooks/useMobileRailHidden";
@@ -858,8 +859,15 @@ function AppLayout() {
     if (userPrefs.enableNoteTabs) actions.openNoteTab({ id: note.id, title: note.title, notebookId: note.notebookId, workspaceId: note.workspaceId, contentFormat: note.contentFormat, colorMark: note.colorMark, isLocked: note.isLocked, isTrashed: note.isTrashed, updatedAt: note.updatedAt });
   });
 
+  // 底部标签栏：进入笔记编辑（移动端全屏编辑器）时隐藏，其余视图常驻。
+  const mobileTabBarVisible = state.mobileView !== "editor";
+
   return (
-    <div ref={appShellRef} className="flex h-[100dvh] w-screen bg-app-bg overflow-hidden transition-colors duration-200">
+    <div
+      ref={appShellRef}
+      className="flex h-[100dvh] w-screen bg-app-bg overflow-hidden transition-colors duration-200"
+      data-mobile-tabbar={mobileTabBarVisible ? "on" : "off"}
+    >
       <NoteDeepLinkBridge />
       {/* 移动端目录使用全屏抽屉；快捷栏默认显示，也可通过独立偏好隐藏。 */}
       <AnimatePresence>
@@ -1070,6 +1078,9 @@ function AppLayout() {
 
       {/* 桌面端文件夹自动同步调度器（仅 Electron，无 UI） */}
       <FolderSyncScheduler />
+
+      {/* 移动端底部标签栏（微信式 5 槽位，长按可替换；桌面端不渲染） */}
+      {mobileTabBarVisible && <MobileTabBar notificationCount={notificationCount} />}
     </div>
   );
 }

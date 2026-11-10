@@ -1,6 +1,26 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { ChevronDown, ChevronRight, PanelLeft, PanelTopClose, PanelTopOpen, Settings, Tags, Trash2, X, CircleDot, Bell, Search } from "lucide-react";
+import {
+  Bell,
+  BrainCircuit,
+  ChevronDown,
+  ChevronRight,
+  CircleDot,
+  FolderOpen,
+  Link2,
+  ListTodo,
+  NotebookPen,
+  PanelLeft,
+  PanelTopClose,
+  PanelTopOpen,
+  Search,
+  Settings,
+  Sparkles,
+  Star,
+  Tags,
+  Trash2,
+  X,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import KnowledgeTreePanel, {
@@ -19,10 +39,15 @@ import { useSiteSettings } from "@/hooks/useSiteSettings";
 import { useUserPreferences } from "@/hooks/useUserPreferences";
 import { api, getCurrentWorkspace } from "@/lib/api";
 import { openWorkspaceIssue, OPEN_NOTIFICATIONS_EVENT } from "@/lib/workspaceIssueNavigation";
-import { isMobileLocalMode } from "@/lib/mobileLocalMode";
+import { isMobileLocalMode, requestMobileAccountLogin } from "@/lib/mobileLocalMode";
 import { filterTagsByQuery } from "@/lib/tagSearch";
-import { isNavigationModuleVisible } from "@/lib/navigationVisibility";
+import {
+  isNavigationModuleVisible,
+  normalizeNavigationModuleOrder,
+} from "@/lib/navigationVisibility";
 import { refreshKnowledgeTreeScrollbars } from "@/lib/knowledgeTreeScrollbarBridge";
+import { getCurrentMindMapAppRoute, pushMindMapAppPath } from "@/lib/mindMapDeepLink";
+import { pushAppPathState } from "@/lib/appPathNavigation";
 import {
   DESKTOP_KNOWLEDGE_TREE_VIEW_MODE_CHANGED_EVENT,
   DESKTOP_KNOWLEDGE_TREE_VIEW_MODE_STORAGE_KEY,
@@ -37,6 +62,28 @@ interface DeleteTagTarget {
   name: string;
   color: string;
 }
+
+/** 抽屉里的模块入口：限定在 setViewMode 接受的视图上（通知走独立事件）。 */
+type MobileDrawerMode = "favorites" | "files" | "diary" | "tasks" | "mindmaps" | "ai-chat" | "shares";
+
+type MobileDrawerModule = {
+  mode: MobileDrawerMode;
+  labelKey: string;
+  icon: React.ReactNode;
+};
+
+const DRAWER_ICON_SIZE = 16;
+
+/** 与 NavRail 的模块集合保持一致；抽屉里只做入口，顺序由用户偏好决定。 */
+const MOBILE_DRAWER_MODULES: MobileDrawerModule[] = [
+  { mode: "favorites", labelKey: "sidebar.favorites", icon: <Star size={DRAWER_ICON_SIZE} /> },
+  { mode: "files", labelKey: "sidebar.fileManager", icon: <FolderOpen size={DRAWER_ICON_SIZE} /> },
+  { mode: "diary", labelKey: "sidebar.diary", icon: <NotebookPen size={DRAWER_ICON_SIZE} /> },
+  { mode: "tasks", labelKey: "sidebar.tasks", icon: <ListTodo size={DRAWER_ICON_SIZE} /> },
+  { mode: "mindmaps", labelKey: "sidebar.mindMaps", icon: <BrainCircuit size={DRAWER_ICON_SIZE} /> },
+  { mode: "ai-chat", labelKey: "sidebar.aiChat", icon: <Sparkles size={DRAWER_ICON_SIZE} /> },
+  { mode: "shares", labelKey: "sidebar.shareManagement", icon: <Link2 size={DRAWER_ICON_SIZE} /> },
+];
 
 interface TagColorTarget {
   tagId: string;
@@ -100,6 +147,32 @@ export default function Sidebar({ variant = "mobile" }: { variant?: "desktop" | 
   const [mobileRailHidden, setMobileRailHidden] = useMobileRailHidden();
   const showNotifications = variant === "mobile" && mobileRailHidden
     && isNavigationModuleVisible("notifications", userPrefs.hiddenNavigationModules);
+  // 移动端把 rail 收起来后，抽屉里原本一个模块入口都不剩（只剩通知）——这里补一份
+  // 模块按钮，保证「打开侧边栏就有按钮」，顺序与可见性都跟随用户的导航偏好。
+  const mobileDrawerModules = useMemo(() => {
+    if (variant !== "mobile" || !mobileRailHidden) return [];
+    const byId = new Map<string, MobileDrawerModule>(MOBILE_DRAWER_MODULES.map((item) => [item.mode, item]));
+    return normalizeNavigationModuleOrder(userPrefs.navigationModuleOrder)
+      .filter((id) => isNavigationModuleVisible(id, userPrefs.hiddenNavigationModules))
+      .map((id) => byId.get(id))
+      .filter((item): item is MobileDrawerModule => Boolean(item));
+  }, [variant, mobileRailHidden, userPrefs.navigationModuleOrder, userPrefs.hiddenNavigationModules]);
+
+  const openDrawerModule = useCallback((mode: MobileDrawerMode) => {
+    if (isMobileLocalMode() && (mode === "ai-chat" || mode === "shares")) {
+      requestMobileAccountLogin();
+      window.location.reload();
+      return;
+    }
+    if (mode === "mindmaps") {
+      pushMindMapAppPath(null);
+    } else if (getCurrentMindMapAppRoute().matched) {
+      pushAppPathState("/");
+    }
+    actions.setViewMode(mode);
+    actions.setSelectedNotebook(null);
+    actions.setMobileSidebar(false);
+  }, [actions]);
   const rootRef = useRef<HTMLDivElement>(null);
   const tagLongPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tagLongPressFired = useRef(false);
@@ -319,6 +392,29 @@ export default function Sidebar({ variant = "mobile" }: { variant?: "desktop" | 
           </div>
         ) : null}
       </header>
+
+      {mobileDrawerModules.length > 0 && (
+        <div data-sidebar-drawer-modules="" className="grid shrink-0 grid-cols-2 gap-1 border-t border-app-border/60 px-2 py-2">
+          {mobileDrawerModules.map((item) => {
+            const active = state.viewMode === item.mode;
+            return (
+              <button
+                key={item.mode}
+                type="button"
+                onClick={() => openDrawerModule(item.mode)}
+                aria-current={active ? "page" : undefined}
+                className={cn(
+                  "flex h-9 items-center gap-2 rounded-lg px-2.5 text-left text-[13px] font-medium transition-colors nowen-press",
+                  active ? "bg-accent-primary/12 text-accent-primary" : "text-tx-secondary hover:bg-app-hover hover:text-tx-primary",
+                )}
+              >
+                <span className={cn("shrink-0", active ? "text-accent-primary" : "text-tx-tertiary")}>{item.icon}</span>
+                <span className="min-w-0 flex-1 truncate">{t(item.labelKey)}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {(variant !== "mobile" || !mobileControlsCollapsed) && (
         <div className="shrink-0 px-3 py-2">

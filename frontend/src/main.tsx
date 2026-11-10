@@ -30,6 +30,7 @@ import "./inline-comments.css";
 import "./loading-experience.css";
 import "./note-appearance.css";
 import "./nowen-refresh.css";
+import "./mobile-tabbar.css";
 import { resolveCurrentAppPathname } from "./lib/appPathNavigation";
 import { observeBootSplashReadiness, reportBootStage } from "./lib/bootSplash";
 

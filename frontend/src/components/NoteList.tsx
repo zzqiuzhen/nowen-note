@@ -4177,6 +4177,7 @@ export default function NoteList({ directorySearchActive = false }: { directoryS
 
         <button
           ref={createMenuAnchorFabRef}
+          data-mobile-fab=""
           onClick={() => handleCreateNote("normal")}
           onContextMenu={(e) => {
             e.preventDefault();
