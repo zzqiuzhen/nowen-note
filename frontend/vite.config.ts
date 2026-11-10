@@ -29,6 +29,25 @@ export default defineConfig(({ mode }) => ({
           .replace(/\s+crossorigin(?=[\s>])/g, "");
       },
     },
+    // iOS 16.0 的 WebKit 还没有 RegExp lookbehind：构造 /(?<=…)/ 会抛
+    // "Invalid regular expression: invalid group specifier name"。react-markdown 只要渲染到
+    // 一条笔记就整棵树失败，表现就是白屏。mdast-util-gfm-autolink-literal 的邮箱正则左侧
+    // 边界在 findEmail()/previous() 里已经二次校验过，lookbehind 属于冗余，构建时去掉。
+    {
+      name: "strip-regexp-lookbehind-for-ios16",
+      enforce: "pre" as const,
+      transform(code: string, id: string) {
+        if (!id.includes("mdast-util-gfm-autolink-literal")) return null;
+        const before = "/(?<=^|\\s|\\p{P}|\\p{S})([-.\\w+]+)@([-\\w]+(?:\\.[-\\w]+)+)/gu";
+        const after = "/([-.\\w+]+)@([-\\w]+(?:\\.[-\\w]+)+)/gu";
+        if (code.includes(before)) return { code: code.replace(before, after), map: null };
+        // Fail the build instead of shipping an IPA that white-screens on iOS 16.
+        if (id.endsWith("gfm-autolink-literal/lib/index.js")) {
+          throw new Error("strip-regexp-lookbehind-for-ios16: email regex not found in " + id);
+        }
+        return null;
+      },
+    },
   ],
   define: {
     // 编译期常量；使用 JSON.stringify 确保是带引号的字符串字面量
