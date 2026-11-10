@@ -35,6 +35,90 @@ import { observeBootSplashReadiness, reportBootStage } from "./lib/bootSplash";
 
 reportBootStage("runtime");
 
+// ---------------------------------------------------------------------------
+// On-device boot probe.
+// iOS builds ship through TrollStore and are validated without Xcode, so the native
+// SceneDelegate evaluates window.__NOWEN_PROBE__() against its own WKWebView and stores
+// the JSON in Documents/ui-probe-*.json. That makes "blank screen" answerable with data
+// (DOM present? root concealed? splash stuck?) instead of guesswork.
+// ---------------------------------------------------------------------------
+function bootErrorText(error: unknown): string {
+  if (error instanceof Error) return `${error.name}: ${error.message}`;
+  try {
+    return String(error);
+  } catch {
+    return "unserializable error";
+  }
+}
+
+// Written outside #root with inline styles: the React root is deliberately concealed
+// (opacity: 0) during boot, so anything inside it stays invisible when boot fails.
+function showFatalOverlay(source: string, error: unknown): void {
+  try {
+    if (!document.body) return;
+    let overlay = document.getElementById("__nowen_boot_fatal");
+    if (!overlay) {
+      overlay = document.createElement("pre");
+      overlay.id = "__nowen_boot_fatal";
+      overlay.setAttribute(
+        "style",
+        "position:fixed;inset:0;z-index:2147483647;margin:0;padding:24px;background:#ffffff;color:#111111;font:12px/1.5 ui-monospace,Menlo,monospace;white-space:pre-wrap;overflow:auto;-webkit-user-select:text;user-select:text;",
+      );
+      document.body.appendChild(overlay);
+      const root = document.getElementById("root");
+      if (root) {
+        root.style.opacity = "1";
+        root.style.pointerEvents = "";
+      }
+    }
+    overlay.textContent = `${overlay.textContent ?? ""}[${source}] ${bootErrorText(error)}\n`;
+  } catch {
+    /* diagnostics must never become another startup failure */
+  }
+}
+
+try {
+  type ProbeWindow = Window & {
+    __NOWEN_PROBE__?: () => string;
+    __NOWEN_BOOT_DIAGNOSTICS__?: { stage?: string; errors?: unknown[] };
+    __NOWEN_BOOT_READY__?: boolean;
+    Capacitor?: unknown;
+  };
+  (window as ProbeWindow).__NOWEN_PROBE__ = () => {
+    const probeWindow = window as ProbeWindow;
+    const root = document.getElementById("root");
+    const splash = document.getElementById("app-boot-splash");
+    const diagnostics = probeWindow.__NOWEN_BOOT_DIAGNOSTICS__;
+    const rect = root?.getBoundingClientRect();
+    const rawErrors = diagnostics?.errors;
+    const bootErrors = Array.isArray(rawErrors) ? rawErrors.slice(-4) : null;
+    return JSON.stringify({
+      href: location.href,
+      readyState: document.readyState,
+      title: document.title,
+      bodyLength: document.body ? document.body.innerHTML.length : -1,
+      bodyText: (document.body?.innerText ?? "").replace(/\s+/g, " ").trim().slice(0, 400),
+      rootChildren: root ? root.children.length : -1,
+      rootOpacity: root ? getComputedStyle(root).opacity : null,
+      rootSize: rect ? `${Math.round(rect.width)}x${Math.round(rect.height)}` : null,
+      rootHTML: root ? root.innerHTML.slice(0, 600) : null,
+      splashPresent: Boolean(splash),
+      splashClass: splash ? splash.className : null,
+      bootReady: Boolean(probeWindow.__NOWEN_BOOT_READY__),
+      stage: diagnostics?.stage ?? null,
+      errors: bootErrors,
+      capacitor: typeof probeWindow.Capacitor !== "undefined",
+      resources: performance
+        .getEntriesByType("resource")
+        .filter((entry) => /\.(js|css)$/.test(entry.name))
+        .slice(-10)
+        .map((entry) => `${entry.name.split("/").pop()} ${Math.round(entry.duration)}ms`),
+    });
+  };
+} catch {
+  /* probe installation is best-effort only */
+}
+
 // iOS 上原生启动图覆盖在 WebView 之上；App 组件挂载前如果一直不隐藏，屏幕就停在启动图上。
 // 这里在引导最开始就收敛（HTML 自带启动卡片，不需要原生启动图兜底）。
 const hideNativeSplashEarly = () => {
@@ -58,6 +142,9 @@ const PublicNotebookView = React.lazy(async () => {
 const GlobalBridges = React.lazy(() => import("./components/GlobalBridges"));
 
 function reportBootError(source: string, error: unknown, fatal: boolean): void {
+  // Fatal boot errors paint themselves outside #root; the root stays concealed until the
+  // splash is dismissed, so a silent `return null` here used to look like a blank screen.
+  if (fatal) showFatalOverlay(source, error);
   try {
     const reporter = (window as Window & { __NOWEN_REPORT_BOOT_ERROR__?: (source: string, error: unknown, fatal: boolean) => void }).__NOWEN_REPORT_BOOT_ERROR__;
     if (typeof reporter === "function") reporter(source, error, fatal);
@@ -90,7 +177,29 @@ class ApplicationBootErrorBoundary extends React.Component<
   }
 
   render() {
-    return this.state.failed ? null : this.props.children;
+    if (!this.state.failed) return this.props.children;
+    const diagnostics = (window as Window & { __NOWEN_BOOT_DIAGNOSTICS__?: { errors?: Array<{ source?: string; message?: string }> } }).__NOWEN_BOOT_DIAGNOSTICS__;
+    const lines = (diagnostics?.errors ?? [])
+      .slice(-4)
+      .map((entry) => `[${entry.source ?? "unknown"}] ${entry.message ?? ""}`)
+      .join("\n");
+    return (
+      <pre
+        style={{
+          position: "fixed",
+          inset: 0,
+          margin: 0,
+          padding: 24,
+          background: "#ffffff",
+          color: "#111111",
+          font: "12px/1.5 ui-monospace, Menlo, monospace",
+          whiteSpace: "pre-wrap",
+          overflow: "auto",
+        }}
+      >
+        {`界面渲染失败\n${lines}`}
+      </pre>
+    );
   }
 }
 
@@ -227,3 +336,15 @@ Promise.resolve()
       renderApplication();
     },
   );
+
+// Last-resort visibility: if #root is still empty after 9s the app is not rendering for a
+// reason the boundary never saw (concealed root + dismissed splash = plain background).
+setTimeout(() => {
+  const root = document.getElementById("root");
+  if (root && root.children.length > 0) return;
+  const diagnostics = (window as Window & { __NOWEN_BOOT_DIAGNOSTICS__?: { stage?: string; errors?: unknown[] } }).__NOWEN_BOOT_DIAGNOSTICS__;
+  showFatalOverlay(
+    "watchdog-empty-root",
+    `stage=${diagnostics?.stage ?? "unknown"} errors=${JSON.stringify(diagnostics?.errors ?? []).slice(0, 600)}`,
+  );
+}, 9000);

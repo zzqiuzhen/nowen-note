@@ -1,5 +1,6 @@
 import UIKit
 import Capacitor
+import WebKit
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -27,6 +28,10 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
         configurationForConnecting connectingSceneSession: UISceneSession,
         options: UIScene.ConnectionOptions
     ) -> UISceneConfiguration {
+        // Deliberately no storyboard: the window is created by SceneDelegate only.
+        // The previous setup (UISceneStoryboardFile = Main in Info.plist) let UIKit build a
+        // second scene window whose CAPBridgeViewController never attached its WebView to the
+        // visible hierarchy, leaving a running process, executing JS and a blank screen.
         let configuration = UISceneConfiguration(name: "Default Configuration", sessionRole: connectingSceneSession.role)
         configuration.delegateClass = SceneDelegate.self
         return configuration
@@ -38,10 +43,18 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
-        // 场景窗口由 Main.storyboard 提供（Info.plist 里 UISceneStoryboardFile = Main，
-        // 根控制器是 CAPBridgeViewController）。这里再手工创建第二个 UIWindow 会实例化第二个
-        // CAPBridgeViewController：WebView 其实已加载完成，但场景窗口一直停在 LaunchScreen 上，
-        // 表现就是「白屏、只剩启动图」。所以只保留冷启动 URL / Universal Link 的转发。
+        guard let windowScene = scene as? UIWindowScene else { return }
+
+        // Exactly one UIWindow and one CAPBridgeViewController for the whole process.
+        // The programmatic bridge renders correctly on iOS 16; the storyboard-instantiated
+        // one does not.
+        let window = UIWindow(windowScene: windowScene)
+        window.rootViewController = CAPBridgeViewController()
+        window.makeKeyAndVisible()
+        self.window = window
+
+        // Under the scene lifecycle cold-start URLs and Universal Links arrive here,
+        // so they can only be forwarded once the bridge owns the window.
         DispatchQueue.main.async {
             for urlContext in connectionOptions.urlContexts {
                 _ = ApplicationDelegateProxy.shared.application(
@@ -60,7 +73,13 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             }
         }
 
-        writeBootDiagnostics(scene)
+        // Diagnostics without Xcode: snapshot windows, web views and page DOM a few times
+        // after launch into Documents/ui-probe-*.json so a blank screen can be triaged over MCP.
+        for delay in [5.0, 12.0, 22.0] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.writeProbe(scene, tag: String(Int(delay)))
+            }
+        }
     }
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
@@ -81,26 +100,75 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         )
     }
 
-    // 把场景/窗口状态写到沙盒 Documents/boot-diag.json，方便在没有 Mac 的情况下
-    // 通过设备 MCP 直接读回，判断是「窗口没显示」还是「WebView 没加载」。
-    private func writeBootDiagnostics(_ scene: UIScene) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
-            guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
-            let windowScene = scene as? UIWindowScene
-            let windows = windowScene?.windows ?? []
-            let keyWindow = windows.first(where: { $0.isKeyWindow }) ?? windows.first
-            let root = keyWindow?.rootViewController
-            let info: [String: Any] = [
-                "sceneWindows": windows.count,
-                "connectedScenes": UIApplication.shared.connectedScenes.count,
-                "keyWindowHidden": keyWindow?.isHidden as Any,
-                "keyWindowBounds": String(describing: keyWindow?.bounds ?? CGRect.zero),
-                "rootController": root.map { String(describing: type(of: $0)) } ?? "nil",
-                "rootSubviews": root?.view.subviews.count ?? -1,
-                "rootViewBounds": String(describing: root?.view.bounds ?? CGRect.zero)
+    private func writeProbe(_ scene: UIScene, tag: String) {
+        guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+        let windowScene = scene as? UIWindowScene
+        let windows = windowScene?.windows ?? []
+
+        var payload: [String: Any] = [
+            "tag": tag,
+            "at": ISO8601DateFormatter().string(from: Date()),
+            "connectedScenes": UIApplication.shared.connectedScenes.count,
+            "windowCount": windows.count
+        ]
+        payload["windows"] = windows.map { window -> [String: Any] in
+            [
+                "hidden": window.isHidden,
+                "alpha": Double(window.alpha),
+                "level": Double(window.windowLevel),
+                "isKey": window.isKeyWindow,
+                "bounds": String(describing: window.bounds),
+                "root": window.rootViewController.map { String(describing: type(of: $0)) } ?? "nil",
+                "rootSubviews": window.rootViewController?.view.subviews.count ?? -1,
+                "rootBounds": String(describing: window.rootViewController?.view.bounds ?? CGRect.zero)
             ]
-            guard let data = try? JSONSerialization.data(withJSONObject: info, options: [.prettyPrinted]) else { return }
-            try? data.write(to: docs.appendingPathComponent("boot-diag.json"))
         }
+
+        let webViews = windows.flatMap { findWebViews(in: $0) }
+        payload["webViewCount"] = webViews.count
+        payload["webViews"] = webViews.map { webView -> [String: Any] in
+            [
+                "hidden": webView.isHidden,
+                "alpha": Double(webView.alpha),
+                "frame": String(describing: webView.frame),
+                "url": webView.url?.absoluteString ?? "nil"
+            ]
+        }
+
+        let group = DispatchGroup()
+        let lock = NSLock()
+        var jsResults: [String] = []
+        for webView in webViews {
+            group.enter()
+            let js = "typeof window.__NOWEN_PROBE__ === 'function' ? window.__NOWEN_PROBE__() : JSON.stringify({probe:'absent',href:location.href,ready:document.readyState,bodyLength:document.body?document.body.innerHTML.length:-1})"
+            webView.evaluateJavaScript(js) { value, error in
+                let text = (value as? String) ?? ("js-error: " + (error?.localizedDescription ?? "nil"))
+                lock.lock()
+                jsResults.append(text)
+                lock.unlock()
+                group.leave()
+            }
+        }
+
+        group.notify(queue: .main) {
+            payload["js"] = jsResults
+            guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted]) else { return }
+            try? data.write(to: docs.appendingPathComponent("ui-probe-" + tag + ".json"))
+        }
+    }
+
+    private func findWebViews(in window: UIWindow) -> [WKWebView] {
+        var found: [WKWebView] = []
+        func walk(_ view: UIView) {
+            if let webView = view as? WKWebView {
+                found.append(webView)
+                return
+            }
+            for subview in view.subviews {
+                walk(subview)
+            }
+        }
+        walk(window)
+        return found
     }
 }
