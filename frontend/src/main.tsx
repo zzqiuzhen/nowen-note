@@ -35,6 +35,15 @@ import { observeBootSplashReadiness, reportBootStage } from "./lib/bootSplash";
 
 reportBootStage("runtime");
 
+// iOS 上原生启动图覆盖在 WebView 之上；App 组件挂载前如果一直不隐藏，屏幕就停在启动图上。
+// 这里在引导最开始就收敛（HTML 自带启动卡片，不需要原生启动图兜底）。
+const hideNativeSplashEarly = () => {
+  void import("@capacitor/splash-screen")
+    .then(({ SplashScreen }) => SplashScreen.hide({ fadeOutDuration: 200 }))
+    .catch(() => { /* web / 插件缺失时静默 */ });
+};
+hideNativeSplashEarly();
+
 // The image transform schema patch must run before either private or public note
 // surfaces evaluate their editor/import schemas, but it must not inflate the login entry.
 const loadImageTransformBootstrap = () => import("./lib/imageNodeTransformBootstrap");

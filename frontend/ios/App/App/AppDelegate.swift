@@ -38,16 +38,10 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
-        guard let windowScene = scene as? UIWindowScene else { return }
-
-        let window = UIWindow(windowScene: windowScene)
-        window.rootViewController = CAPBridgeViewController()
-        window.makeKeyAndVisible()
-        self.window = window
-
-        // With the scene lifecycle, cold-start URLs and Universal Links arrive in
-        // connectionOptions instead of UIApplicationDelegate. Forward them only
-        // after the Capacitor bridge has been attached to the window.
+        // 场景窗口由 Main.storyboard 提供（Info.plist 里 UISceneStoryboardFile = Main，
+        // 根控制器是 CAPBridgeViewController）。这里再手工创建第二个 UIWindow 会实例化第二个
+        // CAPBridgeViewController：WebView 其实已加载完成，但场景窗口一直停在 LaunchScreen 上，
+        // 表现就是「白屏、只剩启动图」。所以只保留冷启动 URL / Universal Link 的转发。
         DispatchQueue.main.async {
             for urlContext in connectionOptions.urlContexts {
                 _ = ApplicationDelegateProxy.shared.application(
@@ -65,6 +59,8 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
                 )
             }
         }
+
+        writeBootDiagnostics(scene)
     }
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
@@ -83,5 +79,28 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             continue: userActivity,
             restorationHandler: { _ in }
         )
+    }
+
+    // 把场景/窗口状态写到沙盒 Documents/boot-diag.json，方便在没有 Mac 的情况下
+    // 通过设备 MCP 直接读回，判断是「窗口没显示」还是「WebView 没加载」。
+    private func writeBootDiagnostics(_ scene: UIScene) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
+            guard let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else { return }
+            let windowScene = scene as? UIWindowScene
+            let windows = windowScene?.windows ?? []
+            let keyWindow = windows.first(where: { $0.isKeyWindow }) ?? windows.first
+            let root = keyWindow?.rootViewController
+            let info: [String: Any] = [
+                "sceneWindows": windows.count,
+                "connectedScenes": UIApplication.shared.connectedScenes.count,
+                "keyWindowHidden": keyWindow?.isHidden as Any,
+                "keyWindowBounds": String(describing: keyWindow?.bounds ?? CGRect.zero),
+                "rootController": root.map { String(describing: type(of: $0)) } ?? "nil",
+                "rootSubviews": root?.view.subviews.count ?? -1,
+                "rootViewBounds": String(describing: root?.view.bounds ?? CGRect.zero)
+            ]
+            guard let data = try? JSONSerialization.data(withJSONObject: info, options: [.prettyPrinted]) else { return }
+            try? data.write(to: docs.appendingPathComponent("boot-diag.json"))
+        }
     }
 }
